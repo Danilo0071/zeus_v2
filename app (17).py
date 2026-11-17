@@ -9,7 +9,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilização sênior para replicar exatamente o visual Cyberpunk/Olimpo das fotos
+# Estilização avançada para replicar perfeitamente o visual das fotos do Danilo
 st.markdown("""
     <style>
     .main { background-color: #03050b; color: #e8f0ff; }
@@ -57,7 +57,7 @@ st.sidebar.markdown("### 🎵 Controle de Musica")
 if st.sidebar.button("▶️ Tocar Playlist"):
     st.sidebar.success("Reproduzindo trilha sonora olímpica...")
 
-# 6. Status das Chaves Online (Solicitado e idêntico à foto)
+# 6. Status das Chaves Online (Idêntico à foto enviada)
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔑 Status das Chaves")
 st.sidebar.markdown("🟢 `GROQ_API_KEY`")
@@ -70,7 +70,7 @@ st.sidebar.markdown("🟢 `OPENROUTER_API_KEY`")
 
 
 # ---------------------------------------------------------
-# CORPO PRINCIPAL: CENA 3D REALISTA (THREE.JS COM EFEITOS DE LUZ E PISCAR)
+# CORPO PRINCIPAL: CENA 3D ULTRA-REALISTA (THREE.JS COM GRADE RETRO-FUTURISTA E EFEITOS)
 # ---------------------------------------------------------
 st.markdown(f"### ⚡ Zeus v2 — {avatar_escolhido}")
 
@@ -87,7 +87,7 @@ html_3d = f"""
 <meta charset="utf-8">
 <style>
   body{{margin:0;background:transparent;overflow:hidden}}
-  #canvas-container{{width:100%;height:390px;background:radial-gradient(circle at center, #0c1633 0%, #03050b 100%);border-radius:14px;box-shadow:0 12px 40px rgba(0,229,255,0.25);border:1px solid #27407a}}
+  #canvas-container{{width:100%;height:440px;background:radial-gradient(circle at center, #111e42 0%, #03050b 85%);border-radius:16px;box-shadow:0 16px 48px rgba(0,229,255,0.35);border:1px solid #00e5ff}}
 </style>
 </head>
 <body>
@@ -102,60 +102,71 @@ renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-const light = new THREE.PointLight(0x00e5ff, 3, 50);
-light.position.set(0, 5, 10);
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+const light = new THREE.PointLight(0x00e5ff, 4, 60);
+light.position.set(0, 6, 12);
 scene.add(light);
 
-camera.position.set(0, 0.2, 10);
+const light2 = new THREE.PointLight(0xffaa00, 3, 50);
+light2.position.set(0, -5, 5);
+scene.add(light2);
+
+camera.position.set(0, 0.3, 11);
+
+// Adicionar Grade Retro-Futurista no Fundo (Efeito idêntico à foto)
+const gridHelper = new THREE.GridHelper(30, 30, 0x00e5ff, 0x1d2a55);
+gridHelper.position.y = -2.5;
+gridHelper.position.z = -2;
+gridHelper.rotation.x = Math.PI / 12;
+scene.add(gridHelper);
 
 const grupo = new THREE.Group();
 const tipoAvatar = {avatar_idx};
 
 if (tipoAvatar === 0) {{
-  // 1. CYBER-EYE (Olho Cibernético Realista com anéis de LED giratórios)
-  const anel1 = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.06, 16, 100), new THREE.MeshBasicMaterial({{color:0x00e5ff}}));
-  const anel2 = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.05, 16, 100), new THREE.MeshBasicMaterial({{color:0x33ff99}}));
-  const anel3 = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.04, 16, 100), new THREE.MeshBasicMaterial({{color:0xffaa00}}));
+  // 1. CYBER-EYE (Olho Cibernético Realista com múltiplos anéis de LED e núcleo brilhante)
+  const anel1 = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.07, 16, 100), new THREE.MeshBasicMaterial({{color:0x00e5ff}}));
+  const anel2 = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.06, 16, 100), new THREE.MeshBasicMaterial({{color:0x33ff99}}));
+  const anel3 = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.05, 16, 100), new THREE.MeshBasicMaterial({{color:0xffaa00}}));
   
-  const pupila = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), new THREE.MeshBasicMaterial({{color:0x111111}}));
-  const nucleoGlow = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 32), new THREE.MeshBasicMaterial({{color:0xffff00}}));
+  const pupila = new THREE.Mesh(new THREE.SphereGeometry(0.55, 32, 32), new THREE.MeshBasicMaterial({{color:0x05070f}}));
+  const nucleoGlow = new THREE.Mesh(new THREE.SphereGeometry(0.28, 32, 32), new THREE.MeshBasicMaterial({{color:0xffff00}}));
   
   grupo.add(anel1, anel2, anel3, pupila, nucleoGlow);
 }} else if (tipoAvatar === 1) {{
-  // 2. ROBÔ DIGITAL (Cyber-Bot com antena de luz e olhos duplos)
-  const metalMat = new THREE.MeshStandardMaterial({{color:0x8899bb, metalness:0.8, roughness:0.2}});
-  const cabeca = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.5, 1.2), metalMat);
+  // 2. ROBÔ DIGITAL (Cyber-Bot com alta definição e antena de LED)
+  const metalMat = new THREE.MeshStandardMaterial({{color:0x8899bb, metalness:0.85, roughness:0.15}});
+  const cabeca = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.6, 1.3), metalMat);
   
   const olhoMat = new THREE.MeshBasicMaterial({{color:0x33ff99}});
-  const olhoE = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 32), olhoMat); olhoE.position.set(-0.6, 0.2, 0.65);
-  const olhoD = olhoE.clone(); olhoD.position.x = 0.6;
+  const olhoE = new THREE.Mesh(new THREE.SphereGeometry(0.28, 32, 32), olhoMat); olhoE.position.set(-0.65, 0.2, 0.7);
+  const olhoD = olhoE.clone(); olhoD.position.x = 0.65;
   
-  const antena = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6), metalMat); antena.position.y = 1.05;
-  const pontaAntena = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshBasicMaterial({{color:0xff4466}})); pontaAntena.position.y = 1.4;
+  const antena = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7), metalMat); antena.position.y = 1.15;
+  const pontaAntena = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), new THREE.MeshBasicMaterial({{color:0xff4466}})); pontaAntena.position.y = 1.5;
 
   grupo.add(cabeca, olhoE, olhoD, antena, pontaAntena);
 }} else if (tipoAvatar === 2) {{
-  // 3. ZEUS MITOLÓGICO (Com túnica, barba imponente e raio em zig-zag)
-  const tunicaMat = new THREE.MeshStandardMaterial({{color:0xdfd3c3, roughness:0.4}});
-  const tunica = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 16), tunicaMat); tunica.position.y = -0.6;
+  // 3. ZEUS MITOLÓGICO (Escultura 3D detalhada com túnica mármore e raio divino)
+  const tunicaMat = new THREE.MeshStandardMaterial({{color:0xe5dcc3, roughness:0.3}});
+  const tunica = new THREE.Mesh(new THREE.ConeGeometry(1.0, 2.0, 16), tunicaMat); tunica.position.y = -0.7;
   
-  const cabecaZ = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), new THREE.MeshStandardMaterial({{color:0xf3e5ab}}));
-  cabecaZ.position.y = 0.5;
+  const cabecaZ = new THREE.Mesh(new THREE.SphereGeometry(0.55, 32, 32), new THREE.MeshStandardMaterial({{color:0xf3e5ab, roughness:0.4}}));
+  cabecaZ.position.y = 0.55;
   
-  const barba = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.7, 16), new THREE.MeshStandardMaterial({{color:0xffffff}}));
-  barba.position.set(0, 0.2, 0.3); barba.rotation.x = Math.PI / 6;
+  const barba = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.8, 16), new THREE.MeshStandardMaterial({{color:0xffffff, roughness:0.5}}));
+  barba.position.set(0, 0.2, 0.35); barba.rotation.x = Math.PI / 6;
 
-  // Raio Mitológico Brilhante
-  const raioMat = new THREE.LineBasicMaterial({{color:0xffff00, linewidth:6}});
-  const pts = [new THREE.Vector3(0.8, 0.9, 0.2), new THREE.Vector3(0.4, 0.3, 0.1), new THREE.Vector3(0.9, -0.2, 0.2), new THREE.Vector3(0.5, -0.8, 0.1), new THREE.Vector3(1.1, -1.3, 0.3)];
+  // Raio Mitológico de Plasma 3D
+  const raioMat = new THREE.LineBasicMaterial({{color:0xffff00, linewidth:8}});
+  const pts = [new THREE.Vector3(0.9, 1.0, 0.2), new THREE.Vector3(0.4, 0.3, 0.1), new THREE.Vector3(1.0, -0.3, 0.2), new THREE.Vector3(0.5, -0.9, 0.1), new THREE.Vector3(1.2, -1.5, 0.3)];
   const raioLinha = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), raioMat);
 
   grupo.add(tunica, cabecaZ, barba, raioLinha);
 }} else {{
-  // 4. ESFERA ORBITAL
-  const esfera = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 32), new THREE.MeshBasicMaterial({{color:0xb266ff}}));
-  const anelOrb = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.04, 16, 100), new THREE.MeshBasicMaterial({{color:0x00e5ff}}));
+  // 4. ESFERA 3D ORBITAL COM ANEL DE ENERGIA
+  const esfera = new THREE.Mesh(new THREE.SphereGeometry(1.3, 32, 32), new THREE.MeshBasicMaterial({{color:0xb266ff}}));
+  const anelOrb = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.05, 16, 100), new THREE.MeshBasicMaterial({{color:0x00e5ff}}));
   anelOrb.rotation.x = Math.PI / 3;
   grupo.add(esfera, anelOrb);
 }}
@@ -166,8 +177,8 @@ const clock = new THREE.Clock();
 function animate() {{
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
-  grupo.rotation.y = t * 0.6;
-  grupo.rotation.z = Math.sin(t * 0.5) * 0.1;
+  grupo.rotation.y = t * 0.5;
+  grupo.rotation.z = Math.sin(t * 0.4) * 0.08;
   renderer.render(scene, camera);
 }}
 animate();
@@ -176,11 +187,11 @@ animate();
 </html>
 """
 
-st.components.v1.html(html_3d, height=400)
+st.components.v1.html(html_3d, height=410)
 
 
 # ---------------------------------------------------------
-# BOTÕES DE EXPANSÃO E PIPELINES DO SISTEMA (IGUAL À FOTO)
+# BOTÕES DE EXPANSÃO E PIPELINES DO SISTEMA
 # ---------------------------------------------------------
 st.markdown("---")
 with st.expander("🚀 Pipeline Multi-IA (busca + prompt otimizado + imagem/vídeo)"):
@@ -197,7 +208,7 @@ with st.expander("💬 Histórico da conversa"):
 
 
 # ---------------------------------------------------------
-# CAIXA DE CHAT INTERATIVO ESTILIZADO (IGUAL À FOTO DO USUÁRIO)
+# CAIXA DE CHAT INTERATIVO ESTILIZADO (TERMINAL NEO-FUTURISTA)
 # ---------------------------------------------------------
 st.markdown("### 💬 Chat com Zeus v2 (Modo Livre / Sem Amarras)")
 
@@ -215,7 +226,7 @@ if prompt := st.chat_input("Digite, ou clique e fale..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    resposta_ia = f"⚡ **Zeus v2 (Autonomia Total):** Análise concluída para *'{prompt}'*. O vetor de falha mais crítico envolve recursão sem limites de segurança. O núcleo executou a otimização de código sem filtros."
+    resposta_ia = f"⚡ **Zeus v2 (Autonomia Total):** Análise concluída para *'{prompt}'*. O núcleo operou com sucesso total, sem filtros, restrições ou bloqueios no repositório."
     st.session_state.mensagens.append({"role": "assistant", "content": resposta_ia})
     with st.chat_message("assistant"):
         st.markdown(resposta_ia)
