@@ -1,14 +1,12 @@
 """
-app.py — IA autônoma + cena 3D (globo, robô, esfera e Zeus) nativo para Streamlit.
+app.py — IA autônoma + cena 3D (Globo, Robô, Esfera e Zeus Mitológico com raio) em UM arquivo.
 """
 import os
 import re
 import json
 import time
-import streamlit as st
-import streamlit.components.v1 as components
+from flask import Flask, request, jsonify, Response
 
-# Importações seguras para variáveis de ambiente e dependências
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -26,12 +24,11 @@ except ImportError:
     Github = None
     GithubException = Exception
 
-# Configurações do modelo e chaves
 MODEL = os.getenv("MODEL", "claude-sonnet-4-6")
 BASE = os.getenv("BRANCH_BASE", "main")
 AUTO_MERGE = os.getenv("AUTO_MERGE", "true").lower() == "true"
 ARQ_MEMORIA = "aprendizados.json"
-BLOQUEADOS = ()  # Sem bloqueios restritivos conforme solicitado
+BLOQUEADOS = ()
 
 api_key = os.getenv("ANTHROPIC_API_KEY", "")
 github_token = os.getenv("GITHUB_TOKEN", "")
@@ -46,18 +43,8 @@ if gh and github_repo:
     except Exception:
         repo = None
 
-# Configuração da página Streamlit para ocupar tela inteira
-st.set_page_config(page_title="IA Autônoma - Zeus v2", layout="wide", initial_sidebar_state="collapsed")
-
-# Estilo para remover margens padrão do Streamlit e garantir imersão 3D total
-st.markdown("""
-    <style>
-        .block-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; overflow: hidden; }
-        #MainMenu { visibility: hidden; }
-        footer { visibility: hidden; }
-        header { visibility: hidden; }
-    </style>
-""", unsafe_allow_html=True)
+app = Flask(__name__)
+SESSOES = {}
 
 
 # ============================ FERRAMENTAS DO AGENTE ============================
@@ -118,12 +105,8 @@ def salvar_aprendizado(licao: str) -> str:
     return "Aprendizado salvo."
 
 
-FUNCOES = {
-    "listar_arquivos": listar_arquivos,
-    "ler_arquivo": ler_arquivo,
-    "aplicar_mudanca": aplicar_mudanca,
-    "salvar_aprendizado": salvar_aprendizado
-}
+FUNCOES = {"listar_arquivos": listar_arquivos, "ler_arquivo": ler_arquivo,
+           "aplicar_mudanca": aplicar_mudanca, "salvar_aprendizado": salvar_aprendizado}
 
 TOOLS = [
     {"type": "web_search_20250305", "name": "web_search"},
@@ -179,45 +162,48 @@ def conversar(historico: list, mensagem: str, max_passos: int = 12) -> str:
     return "Parei após muitos passos; me diga como continuar."
 
 
-# ============================= GERENCIAMENTO DE HISTÓRICO NO STREAMLIT =============================
-if "mensagens" not in st.session_state:
-    st.session_state.mensagens = [
-        {"role": "ia", "texto": "Olá, Danilo! Zeus v2 conectado e pronto com total liberdade. Como posso ajudar hoje?"}
-    ]
-
-# Tratamento de entrada do chat via parâmetros do componente HTML ou estado
-if "input_usuario" not in st.session_state:
-    st.session_state.input_usuario = ""
+# ================================== ROTAS ======================================
+@app.get("/")
+def home():
+    return Response(HTML, mimetype="text/html")
 
 
-# ============================= INTERFACE + 3D UNIFICADA ==================================
-# Interface HTML/JS contendo a cena Three.js e o chat integrada com Streamlit State se necessário
-HTML_CODE = r"""<!DOCTYPE html>
+@app.post("/chat")
+def chat():
+    dados = request.get_json(force=True)
+    sid = dados.get("sid", "padrao")
+    hist = SESSOES.setdefault(sid, [])
+    if len(hist) > 60:
+        hist.clear()
+    try:
+        return jsonify({"resposta": conversar(hist, dados.get("mensagem", ""))})
+    except Exception as e:
+        hist.clear()
+        return jsonify({"resposta": f"Erro interno: {e}"}), 500
+
+
+# ============================= INTERFACE + 3D (ZEUS MITOLÓGICO) ==================================
+HTML = r"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>IA Autônoma - Zeus v2</title>
+<title>Zeus v2 - Mitologia Grega & IA Autônoma</title>
 <style>
-  html,body{margin:0;height:100%;background:#05070f;color:#e8f0ff;font-family:system-ui,sans-serif;overflow:hidden}
+  html,body{margin:0;height:100%;background:#03050b;color:#e8f0ff;font-family:system-ui,sans-serif;overflow:hidden}
   #cena{position:fixed;inset:0 0 38% 0}
   #cena canvas{display:block;width:100%;height:100%}
   #painel{position:fixed;left:0;right:0;bottom:0;height:38%;display:flex;flex-direction:column;
-          background:rgba(8,12,28,.95);border-top:1px solid #1d2a55}
+          background:rgba(8,12,28,.95);border-top:1px solid #27407a}
   #msgs{flex:1;overflow-y:auto;padding:12px 16px;font-size:15px;line-height:1.4}
-  .m{margin:8px 0;white-space:pre-wrap}.eu{color:#9fd8ff}.ia{color:#e8f0ff}
-  #linha{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(5,7,15,0.9)}
-  #txt{flex:1;padding:12px;border-radius:10px;border:1px solid #27407a;background:#0c1330;color:#fff;font-size:16px}
-  #env{padding:0 20px;border:0;border-radius:10px;background:#3366ff;color:#fff;font-size:16px;cursor:pointer}
-  #env:hover{background:#2552e0}
+  .m{margin:6px 0;white-space:pre-wrap}.eu{color:#9fd8ff}.ia{color:#e8f0ff}
+  #linha{display:flex;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+  #txt{flex:1;padding:12px;border-radius:10px;border:1px solid #3366ff;background:#0c1330;color:#fff;font-size:16px}
+  #env{padding:0 20px;border:0;border-radius:10px;background:linear-gradient(135deg,#3366ff,#00e5ff);color:#fff;font-size:16px;font-weight:bold;cursor:pointer}
 </style></head><body>
 <div id="cena"></div>
 <div id="painel">
-  <div id="msgs">
-    <div class="m ia"><b>Zeus v2:</b> Sistemas online com liberdade total e autonomia ativada. Envie seu comando!</div>
-  </div>
-  <div id="linha">
-    <input id="txt" placeholder="Digite seu comando para a IA..." autocomplete="off">
-    <button id="env">Enviar</button>
-  </div>
+  <div id="msgs"></div>
+  <div id="linha"><input id="txt" placeholder="Converse com Zeus v2 (livre de filtros)..." autocomplete="off">
+  <button id="env">Enviar</button></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -228,8 +214,8 @@ const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 el.appendChild(renderer.domElement);
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const luzGeral = new THREE.PointLight(0xffffff, 1, 50); luzGeral.position.set(0,5,10); scene.add(luzGeral);
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const luzGeral = new THREE.PointLight(0xffcc00, 1.5, 50); luzGeral.position.set(0,5,10); scene.add(luzGeral);
 
 function ajustar(){
   const w = el.clientWidth, h = el.clientHeight;
@@ -245,6 +231,7 @@ function halo(cor, raio, op){
     new THREE.MeshBasicMaterial({color:cor, transparent:true, opacity:op, side:THREE.BackSide}));
 }
 
+// ---------- GLOBO ----------
 const globo = new THREE.Group();
 globo.add(new THREE.Mesh(new THREE.SphereGeometry(1.3,32,24), new THREE.MeshBasicMaterial({color:0x0a2a1a})));
 globo.add(new THREE.Mesh(new THREE.SphereGeometry(1.32,24,16),
@@ -252,6 +239,7 @@ globo.add(new THREE.Mesh(new THREE.SphereGeometry(1.32,24,16),
 globo.add(halo(0x33ff99,1.6,.08));
 globo.position.set(...POS.globo); scene.add(globo);
 
+// ---------- ROBÔ ----------
 const robo = new THREE.Group();
 const metal = new THREE.MeshStandardMaterial({color:0x8899bb, metalness:.7, roughness:.35});
 const corpo = new THREE.Mesh(new THREE.BoxGeometry(1.1,1.0,0.8), metal); corpo.position.y=-0.6;
@@ -264,6 +252,7 @@ const ponta = new THREE.Mesh(new THREE.SphereGeometry(0.09,16,16), new THREE.Mes
 robo.add(corpo, cabeca, olhoE, olhoD, antena, ponta);
 robo.position.set(...POS.robo); scene.add(robo);
 
+// ---------- ESFERA ----------
 const esfera = new THREE.Group();
 esfera.add(new THREE.Mesh(new THREE.SphereGeometry(1.0,48,48), new THREE.MeshBasicMaterial({color:0xb266ff})));
 esfera.add(halo(0xb266ff,1.35,.15));
@@ -271,72 +260,102 @@ const anel = new THREE.Mesh(new THREE.TorusGeometry(1.5,0.03,12,80), new THREE.M
 anel.rotation.x = Math.PI/2.4; esfera.add(anel);
 esfera.position.set(...POS.esfera); scene.add(esfera);
 
-function criarZeus(pos){
+// ---------- ZEUS MITOLÓGICO (Personagem com Barba, Túnica e Raio Clássico) ----------
+function criarZeusMitologico(pos){
   const g = new THREE.Group(); g.position.set(...pos);
-  const nucleo = new THREE.Mesh(new THREE.SphereGeometry(0.6,48,48), new THREE.MeshBasicMaterial({color:0x9fd8ff}));
-  const casca = new THREE.Mesh(new THREE.IcosahedronGeometry(1,3),
-    new THREE.MeshBasicMaterial({color:0x3366ff, wireframe:true, transparent:true, opacity:.55}));
-  const luz = new THREE.PointLight(0x88ccff, 3, 12);
-  const raios = new THREE.Group();
-  const matRaio = new THREE.LineBasicMaterial({color:0xe8f6ff});
-  g.add(nucleo, casca, halo(0x66ccff,1.25,.12), luz, raios);
-  function raio(){
-    const dir = new THREE.Vector3(Math.random()-.5, Math.random()-.5, Math.random()-.5).normalize();
-    const pts = [];
-    for(let i=0;i<=8;i++){
-      const p = dir.clone().multiplyScalar(0.6 + i/8*1.1);
-      if(i>0 && i<8) p.add(new THREE.Vector3((Math.random()-.5)*.25,(Math.random()-.5)*.25,(Math.random()-.5)*.25));
-      pts.push(p);
-    }
+  
+  // Corpo / Túnica Estilizada (Tom dourado e mármore grego)
+  const tunicaMat = new THREE.MeshStandardMaterial({color:0xdfd3c3, roughness:0.4});
+  const túnica = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.4, 16), tunicaMat);
+  túnica.position.y = -0.5;
+
+  // Cabeça de Zeus
+  const peleMat = new THREE.MeshStandardMaterial({color:0xf3e5ab, roughness:0.5});
+  const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 32), peleMat);
+  cabeca.position.y = 0.4;
+
+  // Barba imponente de Zeus
+  const barbaMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.8});
+  const barba = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 16), barbaMat);
+  barba.position.set(0, 0.15, 0.2);
+  barba.rotation.x = Math.PI / 6;
+
+  // Olhos brilhantes de divindade
+  const olhoZeusMat = new THREE.MeshBasicMaterial({color:0x00ffff});
+  const olho1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), olhoZeusMat);
+  olho1.position.set(-0.12, 0.45, 0.35);
+  const olho2 = olho1.clone(); olho2.position.x = 0.12;
+
+  // Raio Mitológico na mão (Zig-zag 3D brilhante)
+  const raioGroup = new THREE.Group();
+  const matRaio = new THREE.LineBasicMaterial({color:0xffff00, linewidth:3});
+  function gerarRaioMito(){
+    const pts = [
+      new THREE.Vector3(0.6, 0.8, 0.2),
+      new THREE.Vector3(0.4, 0.3, 0.1),
+      new THREE.Vector3(0.7, -0.1, 0.2),
+      new THREE.Vector3(0.5, -0.6, 0.1),
+      new THREE.Vector3(0.9, -1.1, 0.3)
+    ];
     return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), matRaio);
   }
-  let ultimo = 0;
+  raioGroup.add(gerarRaioMito());
+  raioGroup.add(halo(0xffaa00, 1.1, 0.15));
+
+  g.add(túnica, cabeca, barba, olho1, olho2, raioGroup, halo(0xffcc00, 1.4, 0.1));
+
+  let ultimoRaio = 0;
   function update(t, intenso){
-    casca.rotation.y = t*(intenso?1.2:.4); casca.rotation.x = t*.2;
-    nucleo.scale.setScalar(1 + Math.sin(t*3)*.05);
-    luz.intensity = 2.5 + Math.sin(t*8)*.8;
-    if(t - ultimo > (intenso?.06:.12)){
-      raios.children.forEach(l=>l.geometry.dispose()); raios.clear();
-      const n = (intenso?5:3) + Math.floor(Math.random()*4);
-      for(let i=0;i<n;i++) raios.add(raio());
-      ultimo = t;
+    g.rotation.y = Math.sin(t * 0.5) * 0.3;
+    olho1.material.color.setHex(intense && Math.floor(t * 8) % 2 ? 0xffffff : 0x00ffff);
+    olho2.material.color.setHex(olho1.material.color.getHex());
+    
+    // Animação dos raios divinos
+    if (t - ultimoRaio > (intenso ? 0.05 : 0.15)){
+      raioGroup.children.forEach(c => { if(c.geometry) c.geometry.dispose(); });
+      raioGroup.clear();
+      raioGroup.add(gerarRaioMito());
+      ultimoRaio = t;
     }
   }
-  scene.add(g); return {g, update};
-}
-const zeus = criarZeus(POS.zeus);
 
+  scene.add(g);
+  return {g, update};
+}
+
+const zeus = criarZeusMitologico(POS.zeus);
+
+// ---------- ANIMAÇÃO GLOBAL ----------
 let pensando = false;
 const relogio = new THREE.Clock();
 renderer.setAnimationLoop(()=>{
   const t = relogio.getElapsedTime(), v = pensando ? 2.5 : 1;
-  globo.rotation.y = t*.3*v;
-  robo.position.y = POS.robo[1] + Math.sin(t*1.5)*.08;
-  robo.rotation.y = Math.sin(t*.6)*.35;
-  olhoMat.color.setHex(pensando && Math.floor(t*6)%2 ? 0xffffff : 0x00e5ff);
-  esfera.rotation.y = t*.5*v; anel.rotation.z = t*.8*v;
+  globo.rotation.y = t * 0.3 * v;
+  robo.position.y = POS.robo[1] + Math.sin(t * 1.5) * 0.08;
+  robo.rotation.y = Math.sin(t * 0.6) * 0.35;
+  esfera.rotation.y = t * 0.5 * v;
+  anel.rotation.z = t * 0.8 * v;
   zeus.update(t, pensando);
   renderer.render(scene, camera);
 });
 
+// ---------- CHAT INTERATIVO ----------
+const sid = localStorage.sid || (localStorage.sid = Math.random().toString(36).slice(2));
 const msgs = document.getElementById("msgs"), txt = document.getElementById("txt");
-function addMsg(classe, texto){
-  const d = document.createElement("div"); d.className = "m " + classe; d.innerHTML = texto;
+function add(classe, texto){
+  const d = document.createElement("div"); d.className = "m " + classe; d.textContent = texto;
   msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d;
 }
-
 async function enviar(){
   const mensagem = txt.value.trim(); if(!mensagem || pensando) return;
-  txt.value = ""; addMsg("eu", "<b>Você:</b> " + mensagem);
-  const espera = addMsg("ia", "<b>Zeus:</b> Pensando...");
+  txt.value = ""; add("eu", "Você: " + mensagem);
+  const espera = add("ia", "Zeus v2: invocando raios e pensando...");
   pensando = true;
   try{
-    // Comunicação nativa otimizada com backend Streamlit Python
-    const resposta = await window.streamlitBridge(mensagem);
-    espera.innerHTML = "<b>Zeus:</b> " + resposta;
-  }catch(e){
-    espera.innerHTML = "<b>Zeus:</b> Erro de comunicação com o núcleo.";
-  }
+    const r = await fetch("/chat", {method:"POST", headers:{"Content-Type":"application/json"},
+                                    body: JSON.stringify({mensagem, sid})});
+    espera.textContent = "Zeus v2: " + (await r.json()).resposta;
+  }catch(e){ espera.textContent = "Zeus v2: falha na conexão com o Olimpo."; }
   pensando = false; msgs.scrollTop = msgs.scrollHeight;
 }
 document.getElementById("env").onclick = enviar;
@@ -344,5 +363,5 @@ txt.addEventListener("keydown", e => { if(e.key === "Enter") enviar(); });
 </script></body></html>
 """
 
-# Layout principal no Streamlit ocupando a tela inteira sem restrições
-components.html(HTML_CODE, height=850, scrolling=False)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
