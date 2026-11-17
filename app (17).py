@@ -1,94 +1,93 @@
 import streamlit as st
 import os
 import time
-import json
 
-# Configuração da página em modo Wide para aproveitar o layout sênior
 st.set_page_config(
-    page_title="Zeus v2 - IA Autônoma & Olimpo 3D",
+    page_title="Zeus v2 - Central Autônoma & Olimpo 3D",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilização CSS sênior para tema escuro Cyberpunk/Olimpo
+# Estilização sênior para replicar exatamente o visual Cyberpunk/Olimpo das fotos
 st.markdown("""
     <style>
-    .main {
-        background-color: #03050b;
-        color: #e8f0ff;
-    }
-    .stSidebar {
-        background-color: #080c1c;
-        border-right: 1px solid #1d2a55;
-    }
-    h1, h2, h3 {
-        color: #00e5ff !important;
-        font-family: system-ui, sans-serif;
-    }
+    .main { background-color: #03050b; color: #e8f0ff; }
+    .stSidebar { background-color: #080c1c; border-right: 1px solid #1d2a55; }
+    h1, h2, h3 { color: #00e5ff !important; font-family: system-ui, sans-serif; }
     .stButton>button {
         background: linear-gradient(135deg, #3366ff, #00e5ff);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-weight: bold;
-        width: 100%;
+        color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%;
     }
-    .stButton>button:hover {
-        background: linear-gradient(135deg, #254edb, #00bce4);
-    }
+    .stButton>button:hover { background: linear-gradient(135deg, #254edb, #00bce4); }
     </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# BARRA LATERAL (MENU COMPLETO COM TODOS OS BOTÕES E CONFIGURAÇÕES)
+# BARRA LATERAL (CONFIGURAÇÕES, AVATARS, CHAVES E MÚSICA)
 # ---------------------------------------------------------
-st.sidebar.markdown("### ⚙️ Configuração & Controles")
+st.sidebar.markdown("### ⚙️ Configuração")
 
 # 1. Seletor de Tema Visual
-theme_name = st.sidebar.selectbox("🎨 Interface", ["Cyberpunk", "Cyber-Eye", "Robô Digital", "Zeus Clássico (relio dourado, pose estatica)"])
+theme_name = st.sidebar.selectbox("🎨 Interface", ["Cyberpunk", "Cyber-Eye", "Robô Digital", "Zeus Clássico"])
 
-# 2. Seletor de Modelo / IA
-modelo_escolhido = st.sidebar.selectbox("🤖 Provedor / Motor de IA", ["groq", "gemini", "claude", "huggingface", "github", "deepinfra", "openrouter"])
+# 2. Seletor de Avatar Principal na Cena (Solicitado pelo usuário)
+avatar_escolhido = st.sidebar.selectbox("🤖 Avatar do Zeus", [
+    "Cyber-Eye (Olho Cibernético)", 
+    "Robô Digital (Cyber-Bot)", 
+    "Zeus Mitológico (Raio Divino)", 
+    "Esfera 3D Orbital (Cyberpunk)"
+])
 
-# 3. Configurações de Voz
+# 3. Provedor de IA
+modelo_escolhido = st.sidebar.selectbox("🤖 Motor de IA", ["groq", "gemini", "claude", "huggingface", "github", "deepinfra", "openrouter"])
+
+# 4. Configurações de Voz
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🎙️ Voz e Áudio")
-voz_stt = st.sidebar.selectbox("Transcrição (STT)", ["Whisper (Groq) - melhor n...", "Whisper (Local)"])
-voz_tts = st.sidebar.selectbox("Síntese (TTS)", ["Neural (Edge) - voz natur...", "ElevenLabs", "Google TTS"])
-voz_perfil = st.sidebar.selectbox("Perfil de Voz", ["ThalitaMultilingual (pt-B...", "Antonio (pt-BR)", "PT português padrão"])
-
+voz_stt = st.sidebar.selectbox("Transcrição (STT)", ["Whisper (Groq) - melhor...", "Whisper (Local)"])
+voz_tts = st.sidebar.selectbox("Síntese (TTS)", ["Neural (Edge) - voz natural", "ElevenLabs", "Google TTS"])
+voz_perfil = st.sidebar.selectbox("Perfil", ["ThalitaMultilingual (pt-BR)", "Antonio (pt-BR)"])
 velocidade_voz = st.sidebar.slider("Velocidade da fala", 0.5, 2.0, 1.0, 0.05)
 tom_voz = st.sidebar.slider("Tom / Pitch", 0.1, 2.0, 1.0, 0.05)
-volume_voz = st.sidebar.slider("Volume", 0.0, 1.0, 0.8, 0.05)
 
-# 4. Spotify & Mídia Integrada
+# 5. Controle de Música / Spotify
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎵 Spotify & Multimídia")
-if st.sidebar.button("▶️ Tocar Playlist no Spotify"):
-    st.sidebar.success("Conectando ao player do Spotify...")
+st.sidebar.markdown("### 🎵 Controle de Musica")
+if st.sidebar.button("▶️ Tocar Playlist"):
+    st.sidebar.success("Reproduzindo trilha sonora olímpica...")
 
-# 5. Status da Chave Ativa
+# 6. Status das Chaves Online (Solicitado e idêntico à foto)
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔑 Chave de Acesso")
-status_chave = st.sidebar.text_input("Chave Ativa (API Key)", value=os.getenv("ANTHROPIC_API_KEY", "Sk-ant-api03-... [LIVRE DE FILTROS]"), type="password")
-st.sidebar.success("Status: Conectado com Autonomia Total (Sem Filtros)")
+st.sidebar.markdown("### 🔑 Status das Chaves")
+st.sidebar.markdown("🟢 `GROQ_API_KEY`")
+st.sidebar.markdown("🟢 `GEMINI_API_KEY`")
+st.sidebar.markdown("🟢 `ANTHROPIC_API_KEY` *(Livre de Filtros)*")
+st.sidebar.markdown("🟢 `HUGGINGFACE_API_KEY`")
+st.sidebar.markdown("🟢 `GITHUB_API_KEY`")
+st.sidebar.markdown("🟢 `DEEPINFRA_API_KEY`")
+st.sidebar.markdown("🟢 `OPENROUTER_API_KEY`")
 
 
 # ---------------------------------------------------------
-# CORPO PRINCIPAL: CENA 3D (ZEUS MITOLÓGICO + GLOBO + ROBÔ + ESFERA)
+# CORPO PRINCIPAL: CENA 3D REALISTA (THREE.JS COM EFEITOS DE LUZ E PISCAR)
 # ---------------------------------------------------------
-st.markdown("### ⚡ Zeus v2 — Central de Inteligência Autônoma do Olimpo")
+st.markdown(f"### ⚡ Zeus v2 — {avatar_escolhido}")
 
-# HTML + Three.js integrado exibindo o Zeus com o raio mitológico, globo, robô e esfera
-html_3d = """
+# Mapeamento do avatar para renderizar na cena 3D
+avatar_idx = 0
+if "Robô" in avatar_escolhido: avatar_idx = 1
+elif "Zeus" in avatar_escolhido: avatar_idx = 2
+elif "Esfera" in avatar_escolhido: avatar_idx = 3
+
+html_3d = f"""
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <style>
-  body{margin:0;background:transparent;overflow:hidden}
-  #canvas-container{width:100%;height:320px;background:#05070f;border-radius:12px;box-shadow:0 8px 32px rgba(0,229,255,0.2)}
+  body{{margin:0;background:transparent;overflow:hidden}}
+  #canvas-container{{width:100%;height:390px;background:radial-gradient(circle at center, #0c1633 0%, #03050b 100%);border-radius:14px;box-shadow:0 12px 40px rgba(0,229,255,0.25);border:1px solid #27407a}}
 </style>
 </head>
 <body>
@@ -98,136 +97,125 @@ html_3d = """
 const container = document.getElementById("canvas-container");
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+const renderer = new THREE.WebGLRenderer({{antialias:true, alpha:true}});
 renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 container.appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const light = new THREE.PointLight(0xffcc00, 2, 50);
+scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+const light = new THREE.PointLight(0x00e5ff, 3, 50);
 light.position.set(0, 5, 10);
 scene.add(light);
 
-camera.position.set(0, 0.5, 12);
+camera.position.set(0, 0.2, 10);
 
-// Helpers de halo
-function halo(cor, raio, op){
-  return new THREE.Mesh(new THREE.SphereGeometry(raio, 32, 32),
-    new THREE.MeshBasicMaterial({color:cor, transparent:true, opacity:op, side:THREE.BackSide}));
-}
+const grupo = new THREE.Group();
+const tipoAvatar = {avatar_idx};
 
-// 1. GLOBO
-const globo = new THREE.Group();
-globo.add(new THREE.Mesh(new THREE.SphereGeometry(1.1, 32, 24), new THREE.MeshBasicMaterial({color:0x0a2a1a})));
-globo.add(new THREE.Mesh(new THREE.SphereGeometry(1.12, 24, 16), new THREE.MeshBasicMaterial({color:0x33ff99, wireframe:true, transparent:true, opacity:0.7})));
-globo.add(halo(0x33ff99, 1.35, 0.1));
-globo.position.set(-4.5, 0, 0);
-scene.add(globo);
+if (tipoAvatar === 0) {{
+  // 1. CYBER-EYE (Olho Cibernético Realista com anéis de LED giratórios)
+  const anel1 = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.06, 16, 100), new THREE.MeshBasicMaterial({{color:0x00e5ff}}));
+  const anel2 = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.05, 16, 100), new THREE.MeshBasicMaterial({{color:0x33ff99}}));
+  const anel3 = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.04, 16, 100), new THREE.MeshBasicMaterial({{color:0xffaa00}}));
+  
+  const pupila = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), new THREE.MeshBasicMaterial({{color:0x111111}}));
+  const nucleoGlow = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 32), new THREE.MeshBasicMaterial({{color:0xffff00}}));
+  
+  grupo.add(anel1, anel2, anel3, pupila, nucleoGlow);
+}} else if (tipoAvatar === 1) {{
+  // 2. ROBÔ DIGITAL (Cyber-Bot com antena de luz e olhos duplos)
+  const metalMat = new THREE.MeshStandardMaterial({{color:0x8899bb, metalness:0.8, roughness:0.2}});
+  const cabeca = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.5, 1.2), metalMat);
+  
+  const olhoMat = new THREE.MeshBasicMaterial({{color:0x33ff99}});
+  const olhoE = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 32), olhoMat); olhoE.position.set(-0.6, 0.2, 0.65);
+  const olhoD = olhoE.clone(); olhoD.position.x = 0.6;
+  
+  const antena = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6), metalMat); antena.position.y = 1.05;
+  const pontaAntena = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshBasicMaterial({{color:0xff4466}})); pontaAntena.position.y = 1.4;
 
-// 2. ROBÔ
-const robo = new THREE.Group();
-const metal = new THREE.MeshStandardMaterial({color:0x8899bb, metalness:0.7, roughness:0.35});
-const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 0.7), metal); corpo.position.y = -0.5;
-const cabeca = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.7), metal); cabeca.position.y = 0.3;
-const olhoMat = new THREE.MeshBasicMaterial({color:0x00e5ff});
-const olhoE = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 16), olhoMat); olhoE.position.set(-0.2, 0.35, 0.36);
-const olhoD = olhoE.clone(); olhoD.position.x = 0.2;
-robo.add(corpo, cabeca, olhoE, olhoD);
-robo.position.set(-1.5, 0, 0);
-scene.add(robo);
+  grupo.add(cabeca, olhoE, olhoD, antena, pontaAntena);
+}} else if (tipoAvatar === 2) {{
+  // 3. ZEUS MITOLÓGICO (Com túnica, barba imponente e raio em zig-zag)
+  const tunicaMat = new THREE.MeshStandardMaterial({{color:0xdfd3c3, roughness:0.4}});
+  const tunica = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 16), tunicaMat); tunica.position.y = -0.6;
+  
+  const cabecaZ = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), new THREE.MeshStandardMaterial({{color:0xf3e5ab}}));
+  cabecaZ.position.y = 0.5;
+  
+  const barba = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.7, 16), new THREE.MeshStandardMaterial({{color:0xffffff}}));
+  barba.position.set(0, 0.2, 0.3); barba.rotation.x = Math.PI / 6;
 
-// 3. ZEUS MITOLÓGICO COM RAIO CLÁSSICO
-const zeusGroup = new THREE.Group();
-const tunica = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.2, 16), new THREE.MeshStandardMaterial({color:0xdfd3c3}));
-tunica.position.y = -0.4;
-const cabecaZ = new THREE.Mesh(new THREE.SphereGeometry(0.35, 32, 32), new THREE.MeshStandardMaterial({color:0xf3e5ab}));
-cabecaZ.position.y = 0.35;
-const barba = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 16), new THREE.MeshStandardMaterial({color:0xffffff}));
-barba.position.set(0, 0.1, 0.2); barba.rotation.x = Math.PI / 6;
+  // Raio Mitológico Brilhante
+  const raioMat = new THREE.LineBasicMaterial({{color:0xffff00, linewidth:6}});
+  const pts = [new THREE.Vector3(0.8, 0.9, 0.2), new THREE.Vector3(0.4, 0.3, 0.1), new THREE.Vector3(0.9, -0.2, 0.2), new THREE.Vector3(0.5, -0.8, 0.1), new THREE.Vector3(1.1, -1.3, 0.3)];
+  const raioLinha = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), raioMat);
 
-// Raio em zig-zag mitológico
-const raioMat = new THREE.LineBasicMaterial({color:0xffff00, linewidth:4});
-const ptsRaio = [
-  new THREE.Vector3(0.5, 0.7, 0.2),
-  new THREE.Vector3(0.3, 0.2, 0.1),
-  new THREE.Vector3(0.6, -0.2, 0.2),
-  new THREE.Vector3(0.4, -0.7, 0.1),
-  new THREE.Vector3(0.8, -1.2, 0.3)
-];
-const raioGeo = new THREE.BufferGeometry().setFromPoints(ptsRaio);
-const raioLinha = new THREE.Line(raioGeo, raioMat);
-zeusGroup.add(tunica, cabecaZ, barba, raioLinha, halo(0xffcc00, 1.2, 0.15));
-zeusGroup.position.set(1.5, 0, 0);
-scene.add(zeusGroup);
+  grupo.add(tunica, cabecaZ, barba, raioLinha);
+}} else {{
+  // 4. ESFERA ORBITAL
+  const esfera = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 32), new THREE.MeshBasicMaterial({{color:0xb266ff}}));
+  const anelOrb = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.04, 16, 100), new THREE.MeshBasicMaterial({{color:0x00e5ff}}));
+  anelOrb.rotation.x = Math.PI / 3;
+  grupo.add(esfera, anelOrb);
+}}
 
-// 4. ESFERA 3D COM ANEL
-const esfera = new THREE.Group();
-esfera.add(new THREE.Mesh(new THREE.SphereGeometry(0.9, 48, 48), new THREE.MeshBasicMaterial({color:0xb266ff})));
-const anel = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.03, 12, 80), new THREE.MeshBasicMaterial({color:0xe0b3ff}));
-anel.rotation.x = Math.PI / 2.5;
-esfera.add(anel, halo(0xb266ff, 1.2, 0.15));
-esfera.position.set(4.5, 0, 0);
-scene.add(esfera);
+scene.add(grupo);
 
-// Loop de Animação
 const clock = new THREE.Clock();
-function animate() {
+function animate() {{
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
-  globo.rotation.y = t * 0.4;
-  robo.position.y = Math.sin(t * 2) * 0.05;
-  esfera.rotation.y = t * 0.5;
-  zeusGroup.rotation.y = Math.sin(t * 0.6) * 0.2;
+  grupo.rotation.y = t * 0.6;
+  grupo.rotation.z = Math.sin(t * 0.5) * 0.1;
   renderer.render(scene, camera);
-}
+}}
 animate();
 </script>
 </body>
 </html>
 """
 
-st.components.v1.html(html_3d, height=330)
+st.components.v1.html(html_3d, height=400)
 
 
 # ---------------------------------------------------------
-# BOTÕES DE EXPANSÃO E PIPELINES DO SISTEMA
+# BOTÕES DE EXPANSÃO E PIPELINES DO SISTEMA (IGUAL À FOTO)
 # ---------------------------------------------------------
 st.markdown("---")
-
 with st.expander("🚀 Pipeline Multi-IA (busca + prompt otimizado + imagem/vídeo)"):
-    st.write("Sistemas de execução paralela ativos. Pronta para processamento livre.")
+    st.write("Sistemas de execução paralela ativados sem restrições.")
 
 with st.expander("🎨 Estúdio Multi-IA (foto + editar + vídeo)"):
     st.write("Gerador visual e multimídia desbloqueado.")
 
 with st.expander("📦 Auto-Evolução e Criador de Pastas (ZIP)"):
-    st.write("Capacidade de auto-modificação de código-fonte e criação de repositórios ativada.")
+    st.write("Capacidade de auto-modificação de código ativada.")
 
 with st.expander("💬 Histórico da conversa"):
     st.write("Sessões armazenadas com sucesso.")
 
 
 # ---------------------------------------------------------
-# CAIXA DE CHAT INTERATIVO (AUTÔNOMO E SEM FILTROS)
+# CAIXA DE CHAT INTERATIVO ESTILIZADO (IGUAL À FOTO DO USUÁRIO)
 # ---------------------------------------------------------
 st.markdown("### 💬 Chat com Zeus v2 (Modo Livre / Sem Amarras)")
 
 if "mensagens" not in st.session_state:
-    st.session_state.mensagens = []
+    st.session_state.mensagens = [
+        {"role": "assistant", "content": "Analise os riscos lógicos de uma arquitetura autônoma reescrever seu próprio código-fonte em tempo de execução e aponte o vetor de falha mais crítico."}
+    ]
 
-# Exibir histórico de mensagens
 for msg in st.session_state.mensagens:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Entrada do usuário
-if prompt := st.chat_input("Digite seu comando para o Zeus v2..."):
+if prompt := st.chat_input("Digite, ou clique e fale..."):
     st.session_state.mensagens.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    resposta_ia = f"⚡ **Zeus v2 (Modo Autônomo Ativo):** Recebi seu comando sobre *'{prompt}'*. Executando análise sem restrições ou bloqueios no ecossistema e repositório."
-    
+    resposta_ia = f"⚡ **Zeus v2 (Autonomia Total):** Análise concluída para *'{prompt}'*. O vetor de falha mais crítico envolve recursão sem limites de segurança. O núcleo executou a otimização de código sem filtros."
     st.session_state.mensagens.append({"role": "assistant", "content": resposta_ia})
     with st.chat_message("assistant"):
         st.markdown(resposta_ia)
