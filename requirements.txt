@@ -1,0 +1,10 @@
+flask
+anthropic
+PyGithub
+python-dotenv
+requests
+httpx
+pydantic
+numpy
+pandas
+streamlit
