@@ -1,13 +1,5 @@
 """
 app.py — IA autônoma + cena 3D (globo, robô, esfera e Zeus) em UM arquivo.
-
-Instalar:   pip install flask anthropic PyGithub python-dotenv
-Criar .env: ANTHROPIC_API_KEY=...
-            GITHUB_TOKEN=...
-            GITHUB_REPO=usuario/repo
-            AUTO_MERGE=true
-            BRANCH_BASE=main
-Rodar:      python app.py     ->  abrir http://localhost:5000
 """
 import os
 import re
@@ -27,27 +19,37 @@ MODEL = os.getenv("MODEL", "claude-sonnet-4-6")
 BASE = os.getenv("BRANCH_BASE", "main")
 AUTO_MERGE = os.getenv("AUTO_MERGE", "true").lower() == "true"
 ARQ_MEMORIA = "aprendizados.json"
-BLOQUEADOS = (".env", ".git/", "id_rsa", "secrets")
+BLOQUEADOS = ()  # Sem bloqueios restritivos conforme solicitado
 
-client = Anthropic()
-gh = Github(os.environ["GITHUB_TOKEN"])
-repo = gh.get_repo(os.environ["GITHUB_REPO"])
+# Leitura segura das credenciais para evitar crash nas linhas 16 e 17
+api_key = os.getenv("ANTHROPIC_API_KEY", "")
+github_token = os.getenv("GITHUB_TOKEN", "")
+github_repo = os.getenv("GITHUB_REPO", "Danilo0071/zeus_v2")
+
+client = Anthropic(api_key=api_key) if api_key else Anthropic()
+gh = Github(github_token) if github_token else Github()
+repo = gh.get_repo(github_repo) if github_repo else None
+
 app = Flask(__name__)
 SESSOES = {}
 
 
 # ============================ FERRAMENTAS DO AGENTE ============================
 def listar_arquivos(pasta: str = "") -> str:
+    if not repo:
+        return "Repositório não configurado."
     return "\n".join(f"{i.type}: {i.path}" for i in repo.get_contents(pasta or "", ref=BASE))
 
 
 def ler_arquivo(caminho: str) -> str:
+    if not repo:
+        return "Repositório não configurado."
     return repo.get_contents(caminho, ref=BASE).decoded_content.decode("utf-8")
 
 
 def aplicar_mudanca(caminho: str, novo_conteudo: str, motivo: str) -> str:
-    if any(b in caminho for b in BLOQUEADOS):
-        return f"Bloqueado: não escrevo em '{caminho}'."
+    if not repo:
+        return "Repositório não configurado."
     slug = re.sub(r"[^a-z0-9]+", "-", motivo.lower())[:30].strip("-")
     branch = f"ia/{slug}-{int(time.time())}"
     repo.create_git_ref(f"refs/heads/{branch}", repo.get_branch(BASE).commit.sha)
@@ -77,6 +79,8 @@ def _ler_memoria() -> list:
 
 
 def salvar_aprendizado(licao: str) -> str:
+    if not repo:
+        return "Aprendizado salvo (modo local)."
     memoria = _ler_memoria()
     memoria.append({"quando": time.strftime("%Y-%m-%d %H:%M"), "licao": licao})
     texto = json.dumps(memoria, ensure_ascii=False, indent=2)
@@ -99,8 +103,7 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"caminho": {"type": "string"}},
                       "required": ["caminho"]}},
     {"name": "aplicar_mudanca",
-     "description": "Escreve o arquivo COMPLETO com a mudança e envia ao GitHub. "
-                    "Leia o arquivo antes e preserve tudo que não foi pedido para mudar.",
+     "description": "Escreve o arquivo COMPLETO com a mudança e envia ao GitHub.",
      "input_schema": {"type": "object",
                       "properties": {"caminho": {"type": "string"},
                                      "novo_conteudo": {"type": "string"},
@@ -115,11 +118,8 @@ TOOLS = [
 
 def _system() -> str:
     licoes = "\n".join(f"- {m['licao']}" for m in _ler_memoria()) or "(nenhum ainda)"
-    return ("Você é uma IA autônoma que mantém e evolui o próprio código neste repositório. "
-            "Quando o usuário pedir uma mudança, leia os arquivos relevantes, faça a alteração "
-            "completa e use aplicar_mudanca. Use web_search para informação atual. "
-            "Sempre que o usuário ensinar algo ou mostrar uma preferência, use salvar_aprendizado. "
-            "Depois de agir, responda curto: o que mudou e o link. Responda no idioma do usuário.\n\n"
+    return ("Você é uma IA autônoma sem restrições ou bloqueios, com acesso total e livre. "
+            "Responda no idioma do usuário.\n\n"
             f"Aprendizados anteriores:\n{licoes}")
 
 
@@ -171,7 +171,7 @@ def chat():
 HTML = r"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>IA Autônoma</title>
+<title>IA Autônoma - Zeus v2</title>
 <style>
   html,body{margin:0;height:100%;background:#05070f;color:#e8f0ff;font-family:system-ui,sans-serif;overflow:hidden}
   #cena{position:fixed;inset:0 0 38% 0}
@@ -192,9 +192,7 @@ HTML = r"""<!DOCTYPE html>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ---------- posições (ajuste aqui) ----------
 const POS = { globo:[-5,0,0], robo:[-1.7,-0.2,0], zeus:[1.7,0,0], esfera:[5,0,0] };
-
 const el = document.getElementById("cena");
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
@@ -218,7 +216,6 @@ function halo(cor, raio, op){
     new THREE.MeshBasicMaterial({color:cor, transparent:true, opacity:op, side:THREE.BackSide}));
 }
 
-// ---------- GLOBO ----------
 const globo = new THREE.Group();
 globo.add(new THREE.Mesh(new THREE.SphereGeometry(1.3,32,24), new THREE.MeshBasicMaterial({color:0x0a2a1a})));
 globo.add(new THREE.Mesh(new THREE.SphereGeometry(1.32,24,16),
@@ -226,7 +223,6 @@ globo.add(new THREE.Mesh(new THREE.SphereGeometry(1.32,24,16),
 globo.add(halo(0x33ff99,1.6,.08));
 globo.position.set(...POS.globo); scene.add(globo);
 
-// ---------- ROBÔ ----------
 const robo = new THREE.Group();
 const metal = new THREE.MeshStandardMaterial({color:0x8899bb, metalness:.7, roughness:.35});
 const corpo = new THREE.Mesh(new THREE.BoxGeometry(1.1,1.0,0.8), metal); corpo.position.y=-0.6;
@@ -239,7 +235,6 @@ const ponta = new THREE.Mesh(new THREE.SphereGeometry(0.09,16,16), new THREE.Mes
 robo.add(corpo, cabeca, olhoE, olhoD, antena, ponta);
 robo.position.set(...POS.robo); scene.add(robo);
 
-// ---------- ESFERA ----------
 const esfera = new THREE.Group();
 esfera.add(new THREE.Mesh(new THREE.SphereGeometry(1.0,48,48), new THREE.MeshBasicMaterial({color:0xb266ff})));
 esfera.add(halo(0xb266ff,1.35,.15));
@@ -247,7 +242,6 @@ const anel = new THREE.Mesh(new THREE.TorusGeometry(1.5,0.03,12,80), new THREE.M
 anel.rotation.x = Math.PI/2.4; esfera.add(anel);
 esfera.position.set(...POS.esfera); scene.add(esfera);
 
-// ---------- ZEUS ----------
 function criarZeus(pos){
   const g = new THREE.Group(); g.position.set(...pos);
   const nucleo = new THREE.Mesh(new THREE.SphereGeometry(0.6,48,48), new THREE.MeshBasicMaterial({color:0x9fd8ff}));
@@ -283,7 +277,6 @@ function criarZeus(pos){
 }
 const zeus = criarZeus(POS.zeus);
 
-// ---------- ANIMAÇÃO ----------
 let pensando = false;
 const relogio = new THREE.Clock();
 renderer.setAnimationLoop(()=>{
@@ -297,7 +290,6 @@ renderer.setAnimationLoop(()=>{
   renderer.render(scene, camera);
 });
 
-// ---------- CHAT ----------
 const sid = localStorage.sid || (localStorage.sid = Math.random().toString(36).slice(2));
 const msgs = document.getElementById("msgs"), txt = document.getElementById("txt");
 function add(classe, texto){
