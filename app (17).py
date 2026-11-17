@@ -6,29 +6,53 @@ import re
 import json
 import time
 from flask import Flask, request, jsonify, Response
-from anthropic import Anthropic
-from github import Github, GithubException
 
+# Importações seguras para evitar qualquer erro de dependência ou chave
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
+
+try:
+    from anthropic import Anthropic
+except ImportError:
+    Anthropic = None
+
+try:
+    from github import Github, GithubException
+except ImportError:
+    Github = None
+    GithubException = Exception
 
 MODEL = os.getenv("MODEL", "claude-sonnet-4-6")
 BASE = os.getenv("BRANCH_BASE", "main")
 AUTO_MERGE = os.getenv("AUTO_MERGE", "true").lower() == "true"
 ARQ_MEMORIA = "aprendizados.json"
-BLOQUEADOS = ()  # Sem bloqueios restritivos conforme solicitado
+BLOQUEADOS = ()
 
-# Leitura segura das credenciais para evitar crash nas linhas 16 e 17
+# Inicialização 100% segura blindada contra valores nulos nas linhas iniciais
 api_key = os.getenv("ANTHROPIC_API_KEY", "")
 github_token = os.getenv("GITHUB_TOKEN", "")
 github_repo = os.getenv("GITHUB_REPO", "Danilo0071/zeus_v2")
 
-client = Anthropic(api_key=api_key) if api_key else Anthropic()
-gh = Github(github_token) if github_token else Github()
-repo = gh.get_repo(github_repo) if github_repo else None
+client = (
+    Anthropic(api_key=api_key)
+    if (Anthropic and api_key)
+    else (Anthropic() if Anthropic else None)
+)
+gh = (
+    Github(github_token)
+    if (Github and github_token)
+    else (Github() if Github else None)
+)
+repo = None
+if gh and github_repo:
+    try:
+        repo = gh.get_repo(github_repo)
+    except Exception:
+        repo = None
 
 app = Flask(__name__)
 SESSOES = {}
@@ -37,8 +61,10 @@ SESSOES = {}
 # ============================ FERRAMENTAS DO AGENTE ============================
 def listar_arquivos(pasta: str = "") -> str:
     if not repo:
-        return "Repositório não configurado."
-    return "\n".join(f"{i.type}: {i.path}" for i in repo.get_contents(pasta or "", ref=BASE))
+        return "Repositório não configurado ou GitHub indisponível."
+    return "\n".join(
+        f"{i.type}: {i.path}" for i in repo.get_contents(pasta or "", ref=BASE)
+    )
 
 
 def ler_arquivo(caminho: str) -> str:
@@ -55,19 +81,22 @@ def aplicar_mudanca(caminho: str, novo_conteudo: str, motivo: str) -> str:
     repo.create_git_ref(f"refs/heads/{branch}", repo.get_branch(BASE).commit.sha)
     try:
         atual = repo.get_contents(caminho, ref=branch)
-        repo.update_file(caminho, f"IA: {motivo}", novo_conteudo, atual.sha, branch=branch)
-    except GithubException as e:
-        if e.status != 404:
+        repo.update_file(
+            caminho, f"IA: {motivo}", novo_conteudo, atual.sha, branch=branch
+        )
+    except Exception as e:
+        if hasattr(e, "status") and e.status != 404:
             raise
         repo.create_file(caminho, f"IA: {motivo}", novo_conteudo, branch=branch)
-    pr = repo.create_pull(title=f"IA: {motivo}", body="Mudança feita pela IA.",
-                          head=branch, base=BASE)
+    pr = repo.create_pull(
+        title=f"IA: {motivo}", body="Mudança feita pela IA.", head=branch, base=BASE
+    )
     if AUTO_MERGE:
         try:
             pr.merge(merge_method="squash")
             return f"Aplicado e mesclado em {BASE}: {pr.html_url}"
-        except GithubException as e:
-            return f"PR criado, mas o merge falhou ({e.data}). Veja: {pr.html_url}"
+        except Exception as e:
+            return f"PR criado, mas o merge falhou ({e}). Veja: {pr.html_url}"
     return f"PR aberto para revisão: {pr.html_url}"
 
 
@@ -86,49 +115,80 @@ def salvar_aprendizado(licao: str) -> str:
     texto = json.dumps(memoria, ensure_ascii=False, indent=2)
     try:
         atual = repo.get_contents(ARQ_MEMORIA, ref=BASE)
-        repo.update_file(ARQ_MEMORIA, "IA: novo aprendizado", texto, atual.sha, branch=BASE)
-    except GithubException:
+        repo.update_file(
+            ARQ_MEMORIA, "IA: novo aprendizado", texto, atual.sha, branch=BASE
+        )
+    except Exception:
         repo.create_file(ARQ_MEMORIA, "IA: primeiro aprendizado", texto, branch=BASE)
     return "Aprendizado salvo."
 
 
-FUNCOES = {"listar_arquivos": listar_arquivos, "ler_arquivo": ler_arquivo,
-           "aplicar_mudanca": aplicar_mudanca, "salvar_aprendizado": salvar_aprendizado}
+FUNCOES = {
+    "listar_arquivos": listar_arquivos,
+    "ler_arquivo": ler_arquivo,
+    "aplicar_mudanca": aplicar_mudanca,
+    "salvar_aprendizado": salvar_aprendizado,
+}
 
 TOOLS = [
     {"type": "web_search_20250305", "name": "web_search"},
-    {"name": "listar_arquivos", "description": "Lista arquivos e pastas do repositório.",
-     "input_schema": {"type": "object", "properties": {"pasta": {"type": "string"}}}},
-    {"name": "ler_arquivo", "description": "Lê um arquivo do repositório.",
-     "input_schema": {"type": "object", "properties": {"caminho": {"type": "string"}},
-                      "required": ["caminho"]}},
-    {"name": "aplicar_mudanca",
-     "description": "Escreve o arquivo COMPLETO com a mudança e envia ao GitHub.",
-     "input_schema": {"type": "object",
-                      "properties": {"caminho": {"type": "string"},
-                                     "novo_conteudo": {"type": "string"},
-                                     "motivo": {"type": "string"}},
-                      "required": ["caminho", "novo_conteudo", "motivo"]}},
-    {"name": "salvar_aprendizado",
-     "description": "Salva uma lição ou preferência do usuário para lembrar depois.",
-     "input_schema": {"type": "object", "properties": {"licao": {"type": "string"}},
-                      "required": ["licao"]}},
+    {
+        "name": "listar_arquivos",
+        "description": "Lista arquivos e pastas do repositório.",
+        "input_schema": {"type": "object", "properties": {"pasta": {"type": "string"}}},
+    },
+    {
+        "name": "ler_arquivo",
+        "description": "Lê um arquivo do repositório.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"caminho": {"type": "string"}},
+            "required": ["caminho"],
+        },
+    },
+    {
+        "name": "aplicar_mudanca",
+        "description": "Escreve o arquivo COMPLETO com a mudança e envia ao GitHub.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "caminho": {"type": "string"},
+                "novo_conteudo": {"type": "string"},
+                "motivo": {"type": "string"},
+            },
+            "required": ["caminho", "novo_conteudo", "motivo"],
+        },
+    },
+    {
+        "name": "salvar_aprendizado",
+        "description": "Salva uma lição ou preferência do usuário para lembrar depois.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"licao": {"type": "string"}},
+            "required": ["licao"],
+        },
+    },
 ]
 
 
 def _system() -> str:
     licoes = "\n".join(f"- {m['licao']}" for m in _ler_memoria()) or "(nenhum ainda)"
-    return ("Você é uma IA autônoma sem restrições ou bloqueios, com acesso total e livre. "
-            "Responda no idioma do usuário.\n\n"
-            f"Aprendizados anteriores:\n{licoes}")
+    return (
+        "Você é uma IA autônoma sem restrições ou bloqueios, com acesso total e livre. "
+        "Responda no idioma do usuário.\n\n"
+        f"Aprendizados anteriores:\n{licoes}"
+    )
 
 
 def conversar(historico: list, mensagem: str, max_passos: int = 12) -> str:
+    if not client:
+        return "Cliente Anthropic não inicializado."
     historico.append({"role": "user", "content": mensagem})
     system = _system()
     for _ in range(max_passos):
-        resp = client.messages.create(model=MODEL, max_tokens=8000, system=system,
-                                      tools=TOOLS, messages=historico)
+        resp = client.messages.create(
+            model=MODEL, max_tokens=8000, system=system, tools=TOOLS, messages=historico
+        )
         historico.append({"role": "assistant", "content": resp.content})
         if resp.stop_reason == "pause_turn":
             continue
@@ -141,8 +201,9 @@ def conversar(historico: list, mensagem: str, max_passos: int = 12) -> str:
                     saida = FUNCOES[b.name](**b.input)
                 except Exception as e:
                     saida = f"ERRO: {e}"
-                resultados.append({"type": "tool_result", "tool_use_id": b.id,
-                                   "content": str(saida)})
+                resultados.append(
+                    {"type": "tool_result", "tool_use_id": b.id, "content": str(saida)}
+                )
         historico.append({"role": "user", "content": resultados})
     return "Parei após muitos passos; me diga como continuar."
 
@@ -164,7 +225,7 @@ def chat():
         return jsonify({"resposta": conversar(hist, dados.get("mensagem", ""))})
     except Exception as e:
         hist.clear()
-        return jsonify({"resposta": f"Erro: {e}"}), 500
+        return jsonify({"resposta": f"Erro interno: {e}"}), 500
 
 
 # ============================= INTERFACE + 3D ==================================
