@@ -97,7 +97,7 @@ def processar_prompt(mensagem):
     except Exception as e:
         return f"❌ Erro na execução da IA: {str(e)}"
 
-def gerar_html_avatar(avatar_atual, ultima_resposta=""):
+def gerar_html_avatar(avatar_atual, ultima_resposta="", voz_selecionada=""):
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -110,14 +110,14 @@ def gerar_html_avatar(avatar_atual, ultima_resposta=""):
   h1 {{ font-size: 1.4rem; margin: 0; text-shadow: 0 0 12px #00ffff, 0 0 25px #ff00ff; letter-spacing: 2px; }}
   p {{ font-size: 0.85rem; color: #ff00ff; text-shadow: 0 0 6px #ff00ff; margin: 5px 0 0 0; }}
   .chat-container {{ position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); width: 95%; max-width: 780px; background: rgba(3,3,12,0.92); border: 1px solid #00ffff; box-shadow: 0 0 25px rgba(0,255,255,0.4), inset 0 0 20px rgba(255,0,255,0.25); border-radius: 10px; padding: 16px; z-index: 10; backdrop-filter: blur(8px); box-sizing: border-box; }}
-  .chat-history {{ height: 175px; overflow-y: auto; font-size: 0.92rem; margin-bottom: 12px; padding-right: 8px; display: flex; flex-direction: column; gap: 10px; }}
+  .chat-history {{ height: 160px; overflow-y: auto; font-size: 0.92rem; margin-bottom: 10px; padding-right: 8px; display: flex; flex-direction: column; gap: 10px; }}
   .message {{ padding: 10px 14px; border-radius: 6px; max-width: 88%; line-height: 1.45; white-space: pre-wrap; }}
   .user-msg {{ background: rgba(255,0,255,0.18); border-left: 3px solid #ff00ff; color: #fff; align-self: flex-end; }}
   .ai-msg {{ background: rgba(0,255,255,0.18); border-left: 3px solid #00ffff; color: #00ffff; align-self: flex-start; }}
-  .input-group {{ display: flex; gap: 10px; }}
-  input[type="text"] {{ flex-grow: 1; min-width: 0; background: rgba(0,0,0,0.75); border: 1px solid #00ffff; color: #00ffff; padding: 12px; border-radius: 6px; font-family: inherit; font-size: 0.95rem; outline: none; box-shadow: inset 0 0 8px rgba(0,255,255,0.6); }}
-  button {{ background: linear-gradient(135deg, #00ffff, #ff00ff); border: none; color: #030308; font-weight: bold; padding: 12px 20px; border-radius: 6px; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 12px rgba(0,255,255,0.6); font-family: inherit; font-size: 0.9rem; }}
-  .mic-btn {{ background: #ff00ff; color: #fff; }}
+  .input-group {{ display: flex; gap: 10px; align-items: center; }}
+  input[type="text"] {{ flex-grow: 1; min-width: 0; background: rgba(0,0,0,0.75); border: 1px solid #00ffff; color: #00ffff; padding: 10px; border-radius: 6px; font-family: inherit; font-size: 0.95rem; outline: none; box-shadow: inset 0 0 8px rgba(0,255,255,0.6); }}
+  button {{ background: linear-gradient(135deg, #00ffff, #ff00ff); border: none; color: #030308; font-weight: bold; padding: 10px 18px; border-radius: 6px; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 12px rgba(0,255,255,0.6); font-family: inherit; font-size: 0.9rem; }}
+  .speak-btn {{ background: #00ffff; color: #030308; font-size: 1.1rem; padding: 8px 12px; }}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -125,12 +125,12 @@ def gerar_html_avatar(avatar_atual, ultima_resposta=""):
 <div id="three-box"></div>
 <div class="ui-overlay">
   <h1 id="title">[ ZEUS v2 • OLIMPO 3D ]</h1>
-  <p id="status">STATUS: ONLINE • INTERAÇÃO ATIVA</p>
+  <p id="status">STATUS: ONLINE • VOZ BR ATIVA</p>
 </div>
 <div class="chat-container">
   <div class="chat-history" id="chatHistory"></div>
   <div class="input-group">
-    <button id="micBtn" class="mic-btn">🎙️</button>
+    <button id="speakLastBtn" class="speak-btn" title="Ouvir última resposta">🔊</button>
     <input type="text" id="userInput" placeholder="Digite seu comando para o Zeus..." />
     <button id="sendBtn">Enviar</button>
   </div>
@@ -141,6 +141,7 @@ sendMsg("streamlit:componentReady", {{apiVersion: 1}});
 sendMsg("streamlit:setFrameHeight", {{height: 750}});
 
 let avatar = "{avatar_atual}";
+let chosenVoiceName = "{voz_selecionada}";
 const TITLES = {{ 
   sphere: "[ ESFERA CYBERPUNK 3D ]", 
   eye: "[ CYBER-EYE • OLHO CIBERNÉTICO ]", 
@@ -157,7 +158,34 @@ function addMessage(text, sender) {{
 }}
 
 let ultimaResp = "{ultima_resposta}";
-if (ultimaResp) {{ addMessage(ultimaResp, "ai"); }}
+if (ultimaResp) {{ 
+  addMessage(ultimaResp, "ai"); 
+  speakText(ultimaResp);
+}}
+
+function speakText(text) {{
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const cleanText = text.replace(/[*#`_>]/g, "");
+  const utterance = new SpeechSynthesisUtterance(cleanText);
+  utterance.lang = "pt-BR";
+  utterance.rate = 1.0;
+  
+  let voices = window.speechSynthesis.getVoices();
+  let voice = voices.find(v => v.name === chosenVoiceName) || 
+              voices.find(v => v.lang.includes("pt") && v.name.includes("Brazil")) || 
+              voices.find(v => v.lang.includes("pt"));
+              
+  if (voice) utterance.voice = voice;
+  window.speechSynthesis.speak(utterance);
+}}
+
+document.getElementById("speakLastBtn").addEventListener("click", function() {{
+  const history = document.querySelectorAll('.ai-msg');
+  if (history.length > 0) {{
+    speakText(history[history.length - 1].textContent);
+  }}
+}});
 
 document.getElementById("sendBtn").addEventListener("click", function () {{
   const text = input.value.trim();
@@ -207,7 +235,7 @@ function rebuildAvatar() {{
       const radius = 2.4 + i * 0.6;
       const orbitRing = new THREE.Mesh(
         new THREE.TorusGeometry(radius, 0.03, 16, 100),
-        new THREE.MeshBasicMaterial({{color: i === 0 ? 0x00ffff : i === 1 ? 0xff00ff : 0xffff00, transparent: true, opacity: 0.7}})
+        new THREE.MeshBasicMaterial({{color: i === 0 ? 0x00ffff : i === 1 ? 0xff00ff : 0xffff00, transparent: true, opacity: 0.7}}
       );
       orbitRing.rotation.x = Math.PI / (2 + i);
       orbitRing.rotation.y = Math.PI / 4;
@@ -222,7 +250,7 @@ function rebuildAvatar() {{
     for(let i=1; i<=3; i++) {{
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(1.5 + i*0.4, 0.04, 16, 100),
-        new THREE.MeshBasicMaterial({{color: 0x00e5ff, transparent: true, opacity: 0.8}})
+        new THREE.MeshBasicMaterial({{color: 0x00e5ff, transparent: true, opacity: 0.8}}
       );
       ring.rotation.x = Math.PI / 3 + i * 0.2;
       currentGroup.add(ring);
@@ -237,7 +265,7 @@ function rebuildAvatar() {{
     for(let i=1; i<=2; i++) {{
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(2.2 + i*0.5, 0.04, 16, 100),
-        new THREE.MeshBasicMaterial({{color: 0xff00ff, transparent: true, opacity: 0.7}})
+        new THREE.MeshBasicMaterial({{color: 0xff00ff, transparent: true, opacity: 0.7}}
       );
       ring.rotation.y = Math.PI / 4 * i;
       currentGroup.add(ring);
@@ -251,7 +279,7 @@ function rebuildAvatar() {{
 
     const solarRing = new THREE.Mesh(
       new THREE.TorusGeometry(2.5, 0.05, 16, 100),
-      new THREE.MeshBasicMaterial({{color: 0xffff00, transparent: true, opacity: 0.9}})
+      new THREE.MeshBasicMaterial({{color: 0xffff00, transparent: true, opacity: 0.9}}
     );
     solarRing.rotation.x = Math.PI / 2;
     currentGroup.add(solarRing);
@@ -291,10 +319,10 @@ window.addEventListener("resize", () => {{
 def main():
     if "messages" not in st.session_state:
         st.session_state.messages = [
-            {"role": "assistant", "content": "Salve, Danilo! Zeus v2 online com todos os avatares funcionais, sistema solar e rotação 3D com o mouse."}
+            {"role": "assistant", "content": "Salve, Danilo! Zeus v2 online com seleções massivas de vozes brasileiras para o chat falar com você."}
         ]
     if "ultima_resposta" not in st.session_state:
-        st.session_state.ultima_resposta = "Salve, Danilo! Zeus v2 online com autonomia total."
+        st.session_state.ultima_resposta = "Salve, Danilo! Zeus v2 online com autonomia total e síntese de voz."
 
     st.sidebar.markdown("### ⚡ Zeus v2 — Olimpo")
     avatar_escolhido = st.sidebar.selectbox("🎯 Avatar Principal", [
@@ -313,6 +341,24 @@ def main():
     avatar_key = avatar_map_dict[avatar_escolhido]
     
     st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🎙️ Opções de Voz em Português (Brasil)")
+    # Várias opções ricas de vozes brasileiras e neutras do navegador
+    opcoes_vozes = [
+        "Google português do Brasil",
+        "Luciana",
+        "Felipe",
+        "Microsoft Antonio - Portuguese (Brazil)",
+        "Microsoft Francisca - Portuguese (Brazil)",
+        "Daniel",
+        "Karen",
+        "Microsoft Ricardo - Portuguese (Brazil)",
+        "Microsoft Camila - Portuguese (Brazil)",
+        "pt-BR-Standard-A",
+        "pt-BR-Standard-B"
+    ]
+    voz_escolhida = st.sidebar.selectbox("Escolher Voz do Chat", opcoes_vozes)
+
+    st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔑 Status das Chaves (Online)")
     for prov in PROVIDERS:
         key_val = _secret(KEYS[prov])
@@ -320,9 +366,9 @@ def main():
         st.sidebar.markdown(f"- `{KEYS[prov]}`: {status_txt}")
 
     st.markdown(f"## ⚡ Zeus v2 — Central Autônoma & Olimpo 3D")
-    st.caption("Núcleo de IA soberano com sistema solar 3D e avatares interativos.")
+    st.caption("Núcleo de IA soberano com sistema solar 3D e síntese de voz brasileira integrada.")
 
-    html_code = gerar_html_avatar(avatar_key, st.session_state.get("ultima_resposta", ""))
+    html_code = gerar_html_avatar(avatar_key, st.session_state.get("ultima_resposta", ""), voz_escolhida)
     texto_usuario = st.components.v1.html(html_code, height=750)
 
     if texto_usuario and isinstance(texto_usuario, str) and texto_usuario != st.session_state.get("ultimo_texto_processado"):
