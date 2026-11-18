@@ -64,7 +64,6 @@ def processar_prompt_geral(mensagem):
         "usando todo o seu potencial e as chaves de API integradas no ecossistema."
     )
     
-    # Tenta Claude primeiro se a chave estiver presente
     if client:
         try:
             msgs = [{"role": m["role"], "content": m["content"]} for m in st.session_state.get("messages", [])[-10:]]
@@ -81,7 +80,6 @@ def processar_prompt_geral(mensagem):
         except Exception:
             pass
 
-    # Fallback / Execução Principal via Groq (Llama 3.3) caso Claude não esteja ativo
     groq_k = _secret("GROQ_API_KEY")
     if groq_k:
         try:
@@ -459,12 +457,10 @@ def main():
         html_code = gerar_html_avatar(avatar_key, st.session_state.get("ultima_resposta", ""), voz_escolhida)
         texto_usuario = st.components.v1.html(html_code, height=680)
 
-        # Se houver comando vindo do chat 3D embaixo
         if texto_usuario and isinstance(texto_usuario, str) and texto_usuario != st.session_state.get("ultimo_texto_processado"):
             st.session_state["ultimo_texto_processado"] = texto_usuario
             st.session_state.messages.append({"role": "user", "content": texto_usuario})
             
-            # AGORA O CHAT PRINCIPAL PROCESSA DE VERDADE COM AS CHAVES (GROQ / CLAUDE) SEM FALHAS!
             resposta = processar_prompt_geral(texto_usuario)
                 
             st.session_state.messages.append({"role": "assistant", "content": resposta})
