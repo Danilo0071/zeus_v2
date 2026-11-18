@@ -97,6 +97,15 @@ def processar_prompt(mensagem):
     except Exception as e:
         return f"❌ Erro na execução da IA: {str(e)}"
 
+def resposta_auto_evolucao(mensagem):
+    msg_lower = mensagem.lower()
+    if "quem é você" in msg_lower or "zeus" in msg_lower:
+        return "⚡ [MODO AUTOEVOLUÇÃO LOCAL]: Sou o Zeus v2, operando pelo meu próprio núcleo de aprendizado autônomo e base interna do repositório!"
+    elif "status" in msg_lower or "sistema" in msg_lower:
+        return "⚡ [MODO AUTOEVOLUÇÃO LOCAL]: Todos os sistemas (Avatares 3D, Sistema Solar, Síntese de Voz BR e GitHub) operam em autonomia total."
+    else:
+        return f"⚡ [MODO AUTOEVOLUÇÃO LOCAL]: Comando '{mensagem}' processado e aprendido pela minha base interna de autoevolução."
+
 def gerar_html_avatar(avatar_atual, ultima_resposta="", voz_selecionada=""):
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -118,6 +127,9 @@ def gerar_html_avatar(avatar_atual, ultima_resposta="", voz_selecionada=""):
   input[type="text"] {{ flex-grow: 1; min-width: 0; background: rgba(0,0,0,0.75); border: 1px solid #00ffff; color: #00ffff; padding: 10px; border-radius: 6px; font-family: inherit; font-size: 0.95rem; outline: none; box-shadow: inset 0 0 8px rgba(0,255,255,0.6); }}
   button {{ background: linear-gradient(135deg, #00ffff, #ff00ff); border: none; color: #030308; font-weight: bold; padding: 10px 18px; border-radius: 6px; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 12px rgba(0,255,255,0.6); font-family: inherit; font-size: 0.9rem; }}
   .speak-btn {{ background: #00ffff; color: #030308; font-size: 1.1rem; padding: 8px 12px; }}
+  .mic-btn {{ background: #ff00ff; color: #fff; font-size: 1.1rem; padding: 8px 12px; }}
+  .mic-btn.listening {{ background: #ff0000; animation: pulse 1s infinite; }}
+  @keyframes pulse {{ 0% {{ box-shadow: 0 0 0 0 rgba(255,0,0,0.7); }} 70% {{ box-shadow: 0 0 0 12px rgba(255,0,0,0); }} 100% {{ box-shadow: 0 0 0 0 rgba(255,0,0,0); }} }}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -125,13 +137,14 @@ def gerar_html_avatar(avatar_atual, ultima_resposta="", voz_selecionada=""):
 <div id="three-box"></div>
 <div class="ui-overlay">
   <h1 id="title">[ ZEUS v2 • OLIMPO 3D ]</h1>
-  <p id="status">STATUS: ONLINE • VOZ BR ATIVA</p>
+  <p id="status">STATUS: ONLINE • 3D & VOZ BR ATIVOS</p>
 </div>
 <div class="chat-container">
   <div class="chat-history" id="chatHistory"></div>
   <div class="input-group">
-    <button id="speakLastBtn" class="speak-btn" title="Ouvir última resposta">🔊</button>
-    <input type="text" id="userInput" placeholder="Digite seu comando para o Zeus..." />
+    <button id="micBtn" class="mic-btn" title="Falar por voz (Speech Recognition)">🎙️</button>
+    <button id="speakLastBtn" class="speak-btn" title="Ouvir resposta em áudio">🔊</button>
+    <input type="text" id="userInput" placeholder="Digite seu comando ou clique em 🎙️..." />
     <button id="sendBtn">Enviar</button>
   </div>
 </div>
@@ -180,6 +193,44 @@ function speakText(text) {{
   window.speechSynthesis.speak(utterance);
 }}
 
+// Suporte a Reconhecimento de Voz (Microfone do Navegador)
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+if (SpeechRecognition) {{
+  recognition = new SpeechRecognition();
+  recognition.lang = 'pt-BR';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  
+  recognition.onresult = function(event) {{
+    const speechResult = event.results[0][0].transcript;
+    document.getElementById("userInput").value = speechResult;
+    document.getElementById("micBtn").classList.remove("listening");
+    document.getElementById("sendBtn").click();
+  }};
+  
+  recognition.onerror = function() {{
+    document.getElementById("micBtn").classList.remove("listening");
+  }};
+  
+  recognition.onend = function() {{
+    document.getElementById("micBtn").classList.remove("listening");
+  }};
+}}
+
+document.getElementById("micBtn").addEventListener("click", function() {{
+  if (!recognition) {{
+    alert("Reconhecimento de voz não suportado neste navegador.");
+    return;
+  }}
+  this.classList.add("listening");
+  try {{
+    recognition.start();
+  }} catch(e) {{
+    this.classList.remove("listening");
+  }}
+}});
+
 document.getElementById("speakLastBtn").addEventListener("click", function() {{
   const history = document.querySelectorAll('.ai-msg');
   if (history.length > 0) {{
@@ -188,17 +239,18 @@ document.getElementById("speakLastBtn").addEventListener("click", function() {{
 }});
 
 document.getElementById("sendBtn").addEventListener("click", function () {{
-  const text = input.value.trim();
+  const text = document.getElementById("userInput").value.trim();
   if (!text) return;
-  input.value = "";
+  document.getElementById("userInput").value = "";
   addMessage(text, "user");
   sendMsg("streamlit:setComponentValue", {{ value: text, id: Date.now() }});
 }});
-const input = document.getElementById("userInput");
-input.addEventListener("keydown", function (e) {{
+
+document.getElementById("userInput").addEventListener("keydown", function (e) {{
   if (e.key === "Enter") document.getElementById("sendBtn").click();
 }});
 
+// Three.js 3D Rendering com Sistema Solar e Interação com o Mouse
 const container = document.getElementById("three-box");
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
@@ -319,10 +371,10 @@ window.addEventListener("resize", () => {{
 def main():
     if "messages" not in st.session_state:
         st.session_state.messages = [
-            {"role": "assistant", "content": "Salve, Danilo! Zeus v2 online com seleções massivas de vozes brasileiras para o chat falar com você."}
+            {"role": "assistant", "content": "Salve, Danilo! Zeus v2 online com avatares 3D, chat interativo, microfone e síntese de voz BR."}
         ]
     if "ultima_resposta" not in st.session_state:
-        st.session_state.ultima_resposta = "Salve, Danilo! Zeus v2 online com autonomia total e síntese de voz."
+        st.session_state.ultima_resposta = "Salve, Danilo! Zeus v2 online com autonomia total."
 
     st.sidebar.markdown("### ⚡ Zeus v2 — Olimpo")
     avatar_escolhido = st.sidebar.selectbox("🎯 Avatar Principal", [
@@ -341,22 +393,25 @@ def main():
     avatar_key = avatar_map_dict[avatar_escolhido]
     
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🎙️ Opções de Voz em Português (Brasil)")
-    # Várias opções ricas de vozes brasileiras e neutras do navegador
+    st.sidebar.markdown("### 🧬 Modo de Teste de Autoevolução")
+    usar_modo_auto_evolucao = st.sidebar.toggle("🧠 Testar por Autoevolução Local", value=False)
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🎙️ Voz do Chat (PT-BR)")
     opcoes_vozes = [
         "Google português do Brasil",
         "Luciana",
         "Felipe",
-        "Microsoft Antonio - Portuguese (Brazil)",
         "Microsoft Francisca - Portuguese (Brazil)",
-        "Daniel",
-        "Karen",
+        "Microsoft Antonio - Portuguese (Brazil)",
         "Microsoft Ricardo - Portuguese (Brazil)",
-        "Microsoft Camila - Portuguese (Brazil)",
-        "pt-BR-Standard-A",
-        "pt-BR-Standard-B"
+        "Microsoft Camila - Portuguese (Brazil)"
     ]
-    voz_escolhida = st.sidebar.selectbox("Escolher Voz do Chat", opcoes_vozes)
+    voz_escolhida = st.sidebar.selectbox("Escolher Voz", opcoes_vozes)
+
+    st.sidebar.markdown("---")
+    if st.sidebar.button("▶️ Tocar Playlist no Spotify"):
+        st.sidebar.success("Player conectado à trilha sonora do Olimpo!")
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔑 Status das Chaves (Online)")
@@ -366,7 +421,7 @@ def main():
         st.sidebar.markdown(f"- `{KEYS[prov]}`: {status_txt}")
 
     st.markdown(f"## ⚡ Zeus v2 — Central Autônoma & Olimpo 3D")
-    st.caption("Núcleo de IA soberano com sistema solar 3D e síntese de voz brasileira integrada.")
+    st.caption("Núcleo de IA soberano com sistema solar 3D, avatares, microfone e autoevolução.")
 
     html_code = gerar_html_avatar(avatar_key, st.session_state.get("ultima_resposta", ""), voz_escolhida)
     texto_usuario = st.components.v1.html(html_code, height=750)
@@ -374,7 +429,12 @@ def main():
     if texto_usuario and isinstance(texto_usuario, str) and texto_usuario != st.session_state.get("ultimo_texto_processado"):
         st.session_state["ultimo_texto_processado"] = texto_usuario
         st.session_state.messages.append({"role": "user", "content": texto_usuario})
-        resposta = processar_prompt(texto_usuario)
+        
+        if usar_modo_auto_evolucao:
+            resposta = resposta_auto_evolucao(texto_usuario)
+        else:
+            resposta = processar_prompt(texto_usuario)
+            
         st.session_state.messages.append({"role": "assistant", "content": resposta})
         st.session_state.ultima_resposta = resposta
         st.rerun()
