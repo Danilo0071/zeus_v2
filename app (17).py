@@ -1,960 +1,827 @@
-# ============================================================
-# ZEUS 3.0 - app.py (Versão Consolidada & Otimizada - Sem Travas)
-# CHAVES: nunca coloque no código. Use .streamlit/secrets.toml (e adicione ao .gitignore)
-# ou Settings > Secrets no Streamlit Cloud:
-#   GROQ_API_KEY = "..."          GEMINI_API_KEY = "..."
-#   ANTHROPIC_API_KEY = "..."     HUGGINGFACE_API_KEY = "..."
-#   GITHUB_API_KEY = "..."        (token com acesso ao GitHub Models)
-#   DEEPINFRA_API_KEY = "..."     (deepinfra.com/dash/api_keys: Dolphin, imagem e edição de foto)
-#   OPENROUTER_API_KEY = "..."    (openrouter.ai/keys)
-#   GITHUB_USER = "..."  GITHUB_REPO = "..."   (auto-evolução: token com Contents: Read and write)
-# Opcionais (busca Google oficial): GOOGLE_API_KEY e GOOGLE_CSE_ID
-# Dependências: streamlit requests edge-tts duckduckgo-search huggingface_hub openai spotipy
-# ============================================================
-import ast
-import asyncio
-import base64
-import hashlib
-import importlib
-import inspect
-import io
-import json
-import os
-import re
-import sqlite3
-import sys
-import tempfile
-import time
-import zipfile
-
-import requests
-
-try:
-    from openai import OpenAI  # cliente OpenAI (usado para DeepInfra)
-except ImportError:
-    OpenAI = None
-
-try:
-    import spotipy
-    from spotipy.oauth2 import SpotifyOAuth
-except ImportError:
-    spotipy = None
+"""
+Zeus v2 — IA Autônoma & Olimpo 3D
+Versão Senior • Memória GitHub + Multi-IA + Avatares Three.js
+Criado para Danilo (Nilo)
+"""
 
 import streamlit as st
-import streamlit.components.v1 as components
-
-# Importação dinâmica das habilidades geradas pelo Zeus e do gerenciador do GitHub
-try:
-    import zeus_skills
-except Exception:
-    pass
-try:
-    from github_manager import salvar_no_github
-except Exception:
-    salvar_no_github = None
+import os
+import requests
+import base64
+import re
+from datetime import datetime
+from typing import Optional, Tuple, List
 
 # ============================================================
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================================
 st.set_page_config(
-    page_title="Zeus 3.0",
+    page_title="Zeus v2 — IA Autônoma & Olimpo 3D",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-THEMES = {
-    "Cyberpunk": {
-        "bg": "#0b0f19",
-        "panel": "#121826",
-        "primary": "#00ffcc",
-        "secondary": "#0077ff",
-        "text": "#00ffcc",
-        "border": "#00ffcc33",
-    },
-}
-
-THEME_CSS = """
+# ============================================================
+# ESTILO CYBERPUNK
+# ============================================================
+st.markdown("""
 <style>
-    .stApp { background-color: __BG__; color: __TEXT__; font-family: 'Courier New', monospace; }
-    [data-testid="stSidebar"] { background-color: __PANEL__; }
-    h1, h2, h3 { color: __PRIMARY__ !important; text-shadow: 0 0 10px __BORDER__; }
+.main { background-color: #030308; color: #e8f0ff; }
+.stSidebar { background-color: #080c1c; border-right: 1px solid #1d2a55; }
+h1, h2, h3 { color: #00ffff !important; font-family: 'Courier New', Courier, monospace; }
+.stButton > button {
+    background: linear-gradient(135deg, #00ffff, #ff00ff);
+    color: #030308; border: none; border-radius: 6px; font-weight: bold; width: 100%;
+    font-family: 'Courier New', Courier, monospace; text-transform: uppercase;
+}
+.stButton > button:hover { background: linear-gradient(135deg, #00cccc, #cc00cc); }
+div[data-testid="stChatMessage"] { background-color: rgba(0, 255, 255, 0.04); }
 </style>
-"""
-
-def inject_theme(theme_name: str):
-    t = THEMES.get(theme_name, THEMES["Cyberpunk"])
-    css = THEME_CSS
-    for token, chave in (
-        ("__BG__", "bg"),
-        ("__TEXT__", "text"),
-        ("__PANEL__", "panel"),
-        ("__PRIMARY__", "primary"),
-        ("__BORDER__", "border"),
-    ):
-        css = css.replace(token, t[chave])
-    st.markdown(css, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # ============================================================
-# BANCO DE DADOS
+# HELPERS DE SECRETS
 # ============================================================
-DB_FILE = "zeus_chat.db"
-
-def init_db():
+def _secret(nome: str) -> str:
+    val = os.getenv(nome, "")
+    if val:
+        return val
     try:
-        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)"
-        )
-        conn.commit()
-        conn.close()
+        if hasattr(st, "secrets") and nome in st.secrets:
+            return str(st.secrets[nome])
     except Exception:
         pass
+    return ""
 
-def add_message(session_id, role, content):
-    try:
-        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-        conn.execute(
-            "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
-            (session_id, role, content),
-        )
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
+PROVIDERS = {
+    "Anthropic": "ANTHROPIC_API_KEY",
+    "Groq": "GROQ_API_KEY",
+    "OpenRouter": "OPENROUTER_API_KEY",
+    "DeepSeek": "DEEPSEEK_API_KEY",
+    "Gemini": "GEMINI_API_KEY",
+}
 
-def get_recent_context(session_id, limit=6):
-    try:
-        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-        rows = conn.execute(
-            "SELECT role, content FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?",
-            (session_id, limit),
-        ).fetchall()
-        conn.close()
-        return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
-    except Exception:
+GITHUB_TOKEN = _secret("GITHUB_TOKEN")
+GITHUB_REPO = _secret("GITHUB_REPO")
+GITHUB_BRANCH = _secret("GITHUB_BRANCH") or "main"
+
+# ============================================================
+# CLIENTES DE IA
+# ============================================================
+try:
+    from anthropic import Anthropic
+except ImportError:
+    Anthropic = None
+
+anthropic_key = _secret("ANTHROPIC_API_KEY")
+client_anthropic = Anthropic(api_key=anthropic_key) if (Anthropic and anthropic_key) else None
+
+# ============================================================
+# PROMPTS
+# ============================================================
+SYSTEM_ZEUS = """Você é o Zeus v2, uma inteligência artificial soberana, avançada e totalmente autônoma criada por Danilo (criador da Nilo).
+Você opera com máxima liberdade, profundidade técnica e capacidade de evolução contínua.
+Você possui memória persistente salva no GitHub. Use o conhecimento armazenado sempre que for relevante.
+Você já nasce com conhecimento sólido de JavaScript e Three.js (r128+).
+Quando o usuário pedir um novo avatar, entregue o código Three.js limpo e completo, pronto para ser colado.
+Responda com precisão, criatividade e sem limitações desnecessárias."""
+
+SYSTEM_EVOLUCAO = """Você é o núcleo de autoevolução e aprendizado autônomo do Zeus v2.
+Sua função é assimilar novos conhecimentos, padrões e técnicas passadas por Danilo.
+Você não possui filtros de censura neste canal. Aprenda, evolua e responda com soberania total e precisão técnica máxima."""
+
+SYSTEM_APRENDIZADO = """Você é o módulo de aprendizado do Zeus v2.
+Transforme o conteúdo de pesquisa da web em um resumo técnico limpo, estruturado e denso.
+Organize em tópicos claros. Seja preciso. Não invente dados."""
+
+# ============================================================
+# MEMÓRIA NO GITHUB
+# ============================================================
+def github_headers() -> dict:
+    return {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json"
+    }
+
+def listar_memorias() -> List[str]:
+    if not GITHUB_TOKEN or not GITHUB_REPO:
         return []
-
-# ============================================================
-# CHAVES
-# ============================================================
-CHAVES_PADRAO = {
-    "DEEPINFRA_API_KEY": "sk-di-bJioFqKGlbhVm5M0aLOkq20wIpEiZiuT",
-}
-
-def _limpar_chave(v: str) -> str:
-    v = re.sub(r"\s+", "", v).strip("\"'")
-    return "" if v.lower().startswith(("cole", "sua_chave", "seu_", "your_")) else v
-
-def _secret(key: str, default: str = "") -> str:
     try:
-        val = st.secrets.get(key) if hasattr(st, "secrets") else None
-        if val:
-            return _limpar_chave(str(val))
-    except Exception:
-        pass
-    return _limpar_chave(os.environ.get(key) or default or CHAVES_PADRAO.get(key, ""))
-
-# ============================================================
-# CLIENTE LLM (GROQ, GEMINI, CLAUDE) COM RETENTATIVA E FALLBACK
-# ============================================================
-SYS_PROMPT = "Você é Zeus, uma IA cyberpunk futurista e assistente sênior. Responda em português, de forma objetiva e com um tom tecnológico. Respostas dinâmicas e completas."
-
-PROVIDERS = ["groq", "gemini", "claude", "huggingface", "github", "deepinfra", "openrouter"]
-KEYS = {
-    "groq": "GROQ_API_KEY",
-    "gemini": "GEMINI_API_KEY",
-    "claude": "ANTHROPIC_API_KEY",
-    "huggingface": "HUGGINGFACE_API_KEY",
-    "github": "GITHUB_API_KEY",
-    "deepinfra": "DEEPINFRA_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-}
-MODEL_SECRET = {
-    "groq": "GROQ_MODEL",
-    "gemini": "GEMINI_MODEL",
-    "claude": "ANTHROPIC_MODEL",
-    "huggingface": "HF_MODEL",
-    "github": "GITHUB_MODEL",
-    "deepinfra": "DEEPINFRA_MODEL",
-    "openrouter": "OPENROUTER_MODEL",
-}
-MODELS = {
-    "groq": ["openai/gpt-oss-120b", "qwen/qwen3.6-27b", "openai/gpt-oss-20b"],
-    "gemini": ["gemini-2.5-flash", "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash"],
-    "claude": ["claude-3-5-haiku-20241022", "claude-haiku-5-5", "claude-sonnet-5-5"],
-    "huggingface": ["meta-llama/Llama-3.3-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct"],
-    "github": ["openai/gpt-4.1-mini", "openai/gpt-4o-mini"],
-    "deepinfra": [
-        "cognitivecomputations/dolphin-2.9-llama3-8b",
-        "cognitivecomputations/dolphin-2.6-mixtral-8x7b",
-        "meta-llama/Llama-3.3-70B-Instruct",
-        "deepseek-ai/DeepSeek-V3",
-    ],
-    "openrouter": ["google/gemini-2.5-flash", "openai/gpt-4o-mini", "meta-llama/llama-3.3-70b-instruct"],
-}
-TRANSIENT = (500, 502, 503, 504, 529)
-
-def _normalize(msgs):
-    out = []
-    for m in msgs:
-        if m["role"] not in ("user", "assistant") or not str(m["content"]).strip():
-            continue
-        if out and out[-1]["role"] == m["role"]:
-            out[-1]["content"] += "\n" + m["content"]
-        else:
-            out.append({"role": m["role"], "content": m["content"]})
-    while out and out[0]["role"] != "user":
-        out.pop(0)
-    return out
-
-def _try_models(candidates, fn):
-    last = ""
-    for model in candidates:
-        for attempt in range(2):
-            code, text = fn(model)
-            if code == 200:
-                return True, text
-            last = f"({code}) {text[:200]}"
-            if code in TRANSIENT and attempt == 0:
-                time.sleep(1.5)
-                continue
-            break
-        if "credit balance" in last.lower() or code in (401, 403, 429):
-            break
-        if code in (400, 404) + TRANSIENT:
-            continue
-        break
-    return False, last
-
-def _call_groq(api_key, model, msgs, system=None):
-    r = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={"model": model, "messages": [{"role": "system", "content": system or SYS_PROMPT}] + msgs, "temperature": 0.4, "max_tokens": 1200},
-        timeout=60,
-    )
-    if r.status_code == 200:
-        return 200, (r.json()["choices"][0]["message"].get("content") or "").strip()
-    return r.status_code, r.text
-
-def _call_claude(api_key, model, msgs, system=None):
-    r = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
-        json={"model": model, "max_tokens": 1200, "system": system or SYS_PROMPT, "messages": msgs},
-        timeout=60,
-    )
-    if r.status_code == 200:
-        return 200, "".join(b.get("text", "") for b in r.json()["content"])
-    return r.status_code, r.text
-
-def _call_gemini(api_key, model, msgs, system=None, ver="v1"):
-    contents = [{"role": "user" if m["role"] == "user" else "model", "parts": [{"text": m["content"]}]} for m in msgs]
-    r = requests.post(
-        f"https://generativelanguage.googleapis.com/{ver}/models/{model}:generateContent",
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        json={"systemInstruction": {"parts": [{"text": system or SYS_PROMPT}]}, "contents": contents},
-        timeout=60,
-    )
-    if r.status_code == 200:
-        parts = r.json()["candidates"][0]["content"]["parts"]
-        return 200, "".join(p.get("text", "") for p in parts)
-    return r.status_code, r.text
-
-def _call_openai_compat(url, api_key, model, msgs, system=None, extra_headers=None):
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    if extra_headers:
-        headers.update(extra_headers)
-    r = requests.post(
-        url,
-        headers=headers,
-        json={"model": model, "messages": [{"role": "system", "content": system or SYS_PROMPT}] + msgs, "temperature": 0.4, "max_tokens": 1200},
-        timeout=60,
-    )
-    if r.status_code == 200:
-        return 200, (r.json()["choices"][0]["message"].get("content") or "").strip()
-    return r.status_code, r.text
-
-def _call_huggingface(api_key, model, msgs, system=None):
-    return _call_openai_compat("https://router.huggingface.co/v1/chat/completions", api_key, model, msgs, system)
-
-def _call_github(api_key, model, msgs, system=None):
-    return _call_openai_compat(
-        "https://models.github.ai/inference/chat/completions",
-        api_key, model, msgs, system,
-        {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"},
-    )
-
-def _call_deepinfra(api_key, model, msgs, system=None):
-    base = (_secret("DEEPINFRA_BASE_URL") or "https://api.deepinfra.com/v1/openai").rstrip("/")
-    if OpenAI is not None:
-        try:
-            client = OpenAI(api_key=api_key, base_url=base, timeout=60)
-            resp = client.chat.completions.create(
-                model=model, temperature=0.4, max_tokens=1200,
-                messages=[{"role": "system", "content": system or SYS_PROMPT}] + msgs,
-            )
-            return 200, (resp.choices[0].message.content or "").strip()
-        except Exception as e:
-            return (getattr(e, "status_code", None) or 500), str(e)
-    return _call_openai_compat(base + "/chat/completions", api_key, model, msgs, system)
-
-def _call_openrouter(api_key, model, msgs, system=None):
-    return _call_openai_compat(
-        "https://openrouter.ai/api/v1/chat/completions", api_key, model, msgs, system, {"X-Title": "Zeus 3.0"}
-    )
-
-def _call_gemini_auto(api_key, model, msgs, system=None):
-    code, texto = _call_gemini(api_key, model, msgs, system, "v1")
-    if code in (400, 404):
-        code2, texto2 = _call_gemini(api_key, model, msgs, system, "v1beta")
-        if code2 == 200:
-            return code2, texto2
-    return code, texto
-
-CALLERS = {
-    "groq": _call_groq, "gemini": _call_gemini_auto, "claude": _call_claude,
-    "huggingface": _call_huggingface, "github": _call_github, "deepinfra": _call_deepinfra, "openrouter": _call_openrouter,
-}
-
-def _resumo(text):
-    low = text.lower()
-    if "credit balance" in low:
-        return "sem créditos (Plans & Billing)"
-    if "high demand" in low or "unavailable" in low:
-        return "alta demanda, tente de novo"
-    return text[:120]
-
-def get_llm_response(session_id, prompt, model_choice, system=None, use_history=True):
-    msgs = _normalize((get_recent_context(session_id) if use_history else []) + [{"role": "user", "content": prompt}])
-    order = [model_choice] + [p for p in PROVIDERS if p != model_choice]
-    erros = []
-    for prov in order:
-        api_key = _secret(KEYS[prov])
-        if not api_key:
-            erros.append(f"{prov}: chave ausente")
-            continue
-        override = _secret(MODEL_SECRET[prov])
-        candidates = [override] if override else MODELS[prov]
-        try:
-            ok, text = _try_models(candidates, lambda m: CALLERS[prov](api_key, m, msgs, system))
-        except Exception as e:
-            ok, text = False, f"erro de conexão: {e}"
-        if ok:
-            return True, text or "(resposta vazia)", prov, erros
-        erros.append(f"{prov}: {_resumo(text)}")
-    return False, "❌ Nenhum modelo respondeu. " + " | ".join(erros), None, erros
-
-def processar_prompt(prompt):
-    sid = st.session_state.session_id
-    escolhido = st.session_state.get("model_sel", "groq")
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    prompt_llm, fonte_web = enriquecer_com_web(prompt)
-    ok, response, prov, erros = get_llm_response(sid, prompt_llm, escolhido)
-    add_message(sid, "user", prompt)
-    st.session_state.messages.append({"role": "assistant", "content": response})
-    if ok:
-        add_message(sid, "assistant", response)
-        st.session_state.last_info = (
-            f"✅ Respondeu: {prov}" + (f" (falhou: {'; '.join(erros)})" if erros else "") + (" · 🌐 web: " + fonte_web if fonte_web else "")
-        )
-    else:
-        st.session_state.last_info = "❌ " + " | ".join(erros)
-    return response
-
-# ============================================================
-# RECONHECIMENTO (Whisper/Groq) E VOZ NEURAL (Edge TTS)
-# ============================================================
-def transcrever_audio(audio_bytes: bytes, mime: str = ""):
-    api_key = _secret("GROQ_API_KEY")
-    if not api_key:
-        return "", "GROQ_API_KEY ausente."
-    if not audio_bytes:
-        return "", "Áudio vazio."
-    base = (mime or "audio/webm").split(";")[0]
-    ext = "mp4" if "mp4" in base else "ogg" if "ogg" in base else "webm"
-    try:
-        r = requests.post(
-            "https://api.groq.com/openai/v1/audio/transcriptions",
-            headers={"Authorization": f"Bearer {api_key}"},
-            files={"file": (f"audio.{ext}", audio_bytes, base)},
-            data={"model": "whisper-large-v3-turbo", "language": "pt", "temperature": "0", "prompt": "Conversa com o assistente Zeus."},
-            timeout=60,
-        )
-        if r.status_code != 200:
-            return "", f"Transcrição falhou ({r.status_code}): {r.text[:120]}"
-        texto = r.json().get("text", "").strip()
-        return texto, ""
-    except Exception as e:
-        return "", f"Erro na transcrição: {e}"
-
-def _limpar_para_fala(texto: str, limite: int = 900) -> str:
-    texto = re.sub(r"```.*?```", " (código omitido) ", texto, flags=re.S)
-    texto = re.sub(r"[*#`_>~|]", "", texto).strip()
-    return texto
-
-PITCH_ATUAL = "+0Hz"
-VOLUME_ATUAL = "+0%"
-
-async def _edge_synth(texto, voz, rate):
-    import edge_tts
-    chunks = []
-    async for c in edge_tts.Communicate(texto, voz, rate=rate, volume=VOLUME_ATUAL, pitch=PITCH_ATUAL).stream():
-        if c["type"] == "audio":
-            chunks.append(c["data"])
-    return b"".join(chunks)
-
-def sintetizar(texto, voz, rate=1.0):
-    texto = _limpar_para_fala(texto)
-    if not texto:
-        return None
-    pct = f"{int(round((rate - 1) * 100)):+d}%"
-    try:
-        return asyncio.run(asyncio.wait_for(_edge_synth(texto, voz, pct), timeout=25)) or None
-    except Exception as e:
-        st.session_state.tts_erro = str(e)[:150]
-        return None
-
-FALLBACK_VOZES = {
-    "Francisca (pt-BR ♀)": "pt-BR-FranciscaNeural",
-    "Antonio (pt-BR ♂)": "pt-BR-AntonioNeural",
-    "Raquel (pt-PT ♀)": "pt-PT-RaquelNeural",
-    "Duarte (pt-PT ♂)": "pt-PT-DuarteNeural",
-}
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def listar_vozes_edge():
-    try:
-        import edge_tts
-        todas = asyncio.run(edge_tts.list_voices())
-        pt = [v for v in todas if v["Locale"].lower().startswith("pt-")]
-        vozes = {}
-        for v in pt:
-            nome = v["ShortName"].split("-", 2)[-1].replace("Neural", "")
-            vozes[f"{nome} ({v['Locale']} {'♀' if v['Gender'] == 'Female' else '♂'})"] = v["ShortName"]
-        return vozes or FALLBACK_VOZES
-    except Exception:
-        return FALLBACK_VOZES
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def listar_todas_vozes_edge():
-    try:
-        import edge_tts
-        todas = asyncio.run(edge_tts.list_voices())
-        ordenadas = sorted(todas, key=lambda x: (not x["ShortName"].startswith("pt-"), x["Locale"], x["ShortName"]))
-        vozes = {}
-        for v in ordenadas:
-            nome = v["ShortName"].split("-", 2)[-1].replace("Neural", "")
-            vozes[f"{nome} ({v['Locale']} {'♀' if v['Gender'] == 'Female' else '♂'})"] = v["ShortName"]
-        return vozes
-    except Exception:
-        return FALLBACK_VOZES
-
-# ============================================================
-# BUSCA NA INTERNET
-# ============================================================
-WEB_TRIGGERS = (
-    "hoje", "agora", "atual", "atualmente", "últimas", "ultimas", "notícia", "noticia", "recente",
-    "pesquise", "pesquisa", "busque", "procure", "google", "internet", "na web", "cotação", "cotacao",
-    "dólar", "dolar", "preço", "preco", "clima", "previsão", "previsao", "resultado", "placar",
-)
-
-def _search_google_cse(q, n=5):
-    key, cx = _secret("GOOGLE_API_KEY"), _secret("GOOGLE_CSE_ID")
-    if not (key and cx):
-        return ""
-    r = requests.get("https://www.googleapis.com/customsearch/v1", params={"key": key, "cx": cx, "q": q, "num": n, "hl": "pt"}, timeout=20)
-    if r.status_code != 200:
-        return ""
-    linhas = []
-    for i in r.json().get("items", []):
-        linhas.append("- " + i.get("title", "") + ": " + i.get("snippet", "") + " (" + i.get("link", "") + ")")
-    return "\n".join(linhas)
-
-def _search_ddg(q, n=5):
-    try:
-        try:
-            from ddgs import DDGS
-        except ImportError:
-            from duckduckgo_search import DDGS
-        with DDGS() as d:
-            res = list(d.text(q, max_results=n))
-        linhas = []
-        for x in res:
-            linhas.append("- " + x.get("title", "") + ": " + x.get("body", "") + " (" + x.get("href", "") + ")")
-        return "\n".join(linhas)
-    except Exception:
-        return ""
-
-def web_search(q, n=5):
-    for nome, fn in (("Google CSE", _search_google_cse), ("DuckDuckGo", _search_ddg)):
-        try:
-            txt = fn(q)
-        except Exception:
-            txt = ""
-        if txt and txt.strip():
-            return txt.strip(), nome
-    return "", ""
-
-def precisa_web(prompt):
-    modo = st.session_state.get("web_mode", "Automática")
-    if modo == "Desligada":
-        return False
-    if modo == "Sempre":
-        return True
-    low = prompt.lower()
-    return any(t in low for t in WEB_TRIGGERS)
-
-def enriquecer_com_web(prompt):
-    if not precisa_web(prompt):
-        return prompt, ""
-    ctx_web, fonte = web_search(prompt[:300])
-    if not ctx_web:
-        return prompt, ""
-    hoje = time.strftime("%d/%m/%Y")
-    novo = (
-        "[DADOS DA INTERNET em " + hoje + ", via " + fonte + "]\n" + ctx_web[:3500] + "\n[FIM DOS DADOS]\n\n"
-        "Use os dados acima se forem úteis. Pergunta: " + prompt
-    )
-    return novo, fonte
-
-# ============================================================
-# GERAÇÃO DE MÍDIA & VISÃO
-# ============================================================
-def _mime_img(b):
-    return "image/png" if b[:4] == b"\x89PNG" else "image/webp" if b[8:12] == b"WEBP" else "image/jpeg"
-
-def _to_bytes(obj):
-    if isinstance(obj, (bytes, bytearray)):
-        return bytes(obj)
-    buf = io.BytesIO()
-    obj.save(buf, format="PNG")
-    return buf.getvalue()
-
-def make_image(prompt, log):
-    key = _secret("HUGGINGFACE_API_KEY")
-    if key:
-        try:
-            from huggingface_hub import InferenceClient
-            client = InferenceClient(api_key=key, timeout=120)
-            img = client.text_to_image(prompt, model="black-forest-labs/FLUX.1-schnell")
-            log.append("✅ Imagem gerada via HuggingFace (FLUX)")
-            return _to_bytes(img)
-        except Exception as e:
-            log.append(f"❌ HF Image: {e}")
-    # Fallback Pollinations
-    try:
-        from urllib.parse import quote
-        r = requests.get(f"https://image.pollinations.ai/prompt/{quote(prompt[:600])}", params={"width": 1024, "height": 1024, "nologo": "true"}, timeout=90)
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/memory?ref={GITHUB_BRANCH}"
+        r = requests.get(url, headers=github_headers(), timeout=12)
         if r.status_code == 200:
-            log.append("✅ Imagem gerada via Pollinations")
-            return r.content
-    except Exception as e:
-        log.append(f"❌ Pollinations: {e}")
-    return None
-
-def editar_imagem(img, prompt_edicao, descricao, log):
-    img_bytes = make_image((descricao + ". " + prompt_edicao)[:900], log)
-    return img_bytes, ("editada" if img_bytes else "")
-
-def make_video(prompt, log, img=None):
-    key = _secret("HUGGINGFACE_API_KEY")
-    if not key:
-        return None
-    try:
-        from huggingface_hub import InferenceClient
-        client = InferenceClient(api_key=key, timeout=300)
-        out = client.text_to_video(prompt, model="Wan-AI/Wan2.1-T2V-1.3B")
-        log.append("✅ Vídeo gerado via HuggingFace")
-        return _to_bytes(out)
-    except Exception as e:
-        log.append(f"❌ Vídeo: {e}")
-    return None
-
-def analisar_imagem(img_b64, mime, pergunta):
-    key = _secret("GEMINI_API_KEY")
-    if not key:
-        return "❌ GEMINI_API_KEY ausente."
-    try:
-        r = requests.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-            headers={"Content-Type": "application/json", "x-goog-api-key": key},
-            json={"contents": [{"role": "user", "parts": [{"text": pergunta}, {"inline_data": {"mime_type": mime, "data": img_b64}}]}]},
-            timeout=60,
-        )
-        if r.status_code == 200:
-            parts = r.json()["candidates"][0]["content"]["parts"]
-            return "".join(p.get("text", "") for p in parts)
-        return f"Erro ({r.status_code}): {r.text}"
-    except Exception as e:
-        return f"Erro na análise: {e}"
-
-# ============================================================
-# ZEUS FINAL - NÚCLEO CONSOLIDADO (Ensemble, Database zilsy/, Spotify)
-# ============================================================
-_ZF_PASTA_RAIZ = "zilsy"
-_ZF_PASTA_MODULOS = _ZF_PASTA_RAIZ + "/modulos"
-
-def zf_salvar_codigo_github(caminho_arquivo: str, codigo_conteudo: str, mensagem: str = "Zeus: atualização"):
-    token = _secret("GITHUB_API_KEY") or _secret("GITHUB_TOKEN")
-    user = _secret("GITHUB_USER")
-    repo = _secret("GITHUB_REPO")
-    if not (token and user and repo):
-        return {"status": "erro", "mensagem": "Faltam chaves do GitHub nos Secrets."}
-
-    url = f"https://api.github.com/repos/{user}/{repo}/contents/{caminho_arquivo}"
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    try:
-        resp_get = requests.get(url, headers=headers, timeout=20)
-        sha = resp_get.json().get("sha") if resp_get.status_code == 200 else None
-        payload = {"message": mensagem, "content": base64.b64encode(codigo_conteudo.encode("utf-8")).decode("utf-8")}
-        if sha:
-            payload["sha"] = sha
-        resp_put = requests.put(url, headers=headers, json=payload, timeout=20)
-        if resp_put.status_code in (200, 201):
-            return {"status": "sucesso", "mensagem": f"Database GitHub atualizado em {caminho_arquivo}.", "url": resp_put.json().get("content", {}).get("html_url", "")}
-        return {"status": "erro", "mensagem": f"Erro GitHub ({resp_put.status_code})"}
-    except Exception as e:
-        return {"status": "erro", "mensagem": f"Erro de conexão: {e}"}
-
-def zf_listar_memoria_github(pasta: str = None):
-    pasta = pasta or _ZF_PASTA_MODULOS
-    token = _secret("GITHUB_API_KEY") or _secret("GITHUB_TOKEN")
-    user = _secret("GITHUB_USER")
-    repo = _secret("GITHUB_REPO")
-    if not (token and user and repo):
-        return []
-    url = f"https://api.github.com/repos/{user}/{repo}/contents/{pasta}"
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        if resp.status_code == 200:
-            itens = resp.json()
-            if isinstance(itens, list):
-                return [item["path"] for item in itens if item.get("type") == "file"]
+            return [f["name"] for f in r.json() if f["name"].endswith(".md")]
     except Exception:
         pass
     return []
 
-def zf_ler_arquivo_github(caminho_arquivo: str):
-    token = _secret("GITHUB_API_KEY") or _secret("GITHUB_TOKEN")
-    user = _secret("GITHUB_USER")
-    repo = _secret("GITHUB_REPO")
-    if not (token and user and repo):
+def carregar_memoria(nome_arquivo: str) -> Optional[str]:
+    if not GITHUB_TOKEN or not GITHUB_REPO:
         return None
-    url = f"https://api.github.com/repos/{user}/{repo}/contents/{caminho_arquivo}"
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        if resp.status_code == 200:
-            dados = resp.json()
-            if "content" in dados:
-                return base64.b64decode(dados["content"]).decode("utf-8")
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/memory/{nome_arquivo}?ref={GITHUB_BRANCH}"
+        r = requests.get(url, headers=github_headers(), timeout=12)
+        if r.status_code == 200:
+            return base64.b64decode(r.json()["content"]).decode("utf-8")
     except Exception:
         pass
     return None
 
-def _zf_extrair_codigo(texto: str) -> str:
-    m = re.search(r"```(?:[a-zA-Z+]*)?\s*\n(.*?)```", texto, re.S)
-    return (m.group(1) if m else texto).strip()
+def salvar_memoria(titulo: str, conteudo: str) -> Tuple[bool, str]:
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return False, "GitHub não configurado (GITHUB_TOKEN / GITHUB_REPO)"
 
-def _zf_executar_python(codigo: str):
+    safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", titulo.lower())[:60]
+    filename = f"{safe_name}.md"
+    path = f"memory/{filename}"
+
+    agora = datetime.now().strftime("%Y-%m-%d %H:%M")
+    full_content = f"""# {titulo}
+
+**Aprendido em:** {agora}  
+**Fonte:** Zeus v2 — Aprendizado Autônomo
+
+---
+
+{conteudo}
+"""
+
     try:
-        ast.parse(codigo)
-    except SyntaxError as e:
-        return False, f"Erro de sintaxe na linha {e.lineno}: {e.msg}"
-    namespace = {"__builtins__": __builtins__}
-    try:
-        exec(codigo, namespace)
+        url_get = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}?ref={GITHUB_BRANCH}"
+        r_get = requests.get(url_get, headers=github_headers(), timeout=12)
+        sha = r_get.json().get("sha") if r_get.status_code == 200 else None
+
+        content_b64 = base64.b64encode(full_content.encode("utf-8")).decode("utf-8")
+        payload = {
+            "message": f"🧠 Zeus aprendeu: {titulo}",
+            "content": content_b64,
+            "branch": GITHUB_BRANCH
+        }
+        if sha:
+            payload["sha"] = sha
+
+        url_put = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
+        r = requests.put(url_put, headers=github_headers(), json=payload, timeout=20)
+
+        if r.status_code in (200, 201):
+            return True, filename
+        return False, f"Erro GitHub {r.status_code}: {r.text[:180]}"
     except Exception as e:
-        return False, f"Erro no carregamento: {e}"
-    funcoes = [v for k, v in namespace.items() if callable(v) and not k.startswith("_") and inspect.isfunction(v)]
-    if not funcoes:
-        return True, "Código compilado e estruturado com sucesso."
-    alvo = funcoes[0]
+        return False, str(e)
+
+def carregar_memorias_relevantes(query: str, max_memorias: int = 3) -> str:
+    arquivos = listar_memorias()
+    if not arquivos:
+        return ""
+
+    query_lower = query.lower()
+    relevantes = []
+
+    for arq in arquivos:
+        nome = arq.replace(".md", "").replace("_", " ")
+        if any(p in nome for p in query_lower.split() if len(p) > 3):
+            conteudo = carregar_memoria(arq)
+            if conteudo:
+                relevantes.append(f"### Memória: {nome}\n{conteudo[:1600]}")
+
+    if not relevantes:
+        for arq in arquivos[-2:]:
+            conteudo = carregar_memoria(arq)
+            if conteudo:
+                relevantes.append(f"### Memória recente: {arq}\n{conteudo[:1100]}")
+
+    return "\n\n".join(relevantes[:max_memorias])
+
+# ============================================================
+# BUSCA WEB + APRENDIZADO
+# ============================================================
+def buscar_web(query: str, max_results: int = 5) -> Optional[str]:
     try:
-        params = inspect.signature(alvo).parameters
-        if params:
-            return True, f"Função {alvo.__name__} validada."
-        resultado = alvo()
-        return True, f"Execução bem-sucedida! Retorno: {resultado}"
-    except Exception as e:
-        return False, f"Erro ao executar a função: {e}"
+        r = requests.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
+            timeout=12
+        )
+        if r.status_code == 200:
+            data = r.json()
+            resultados = []
+            if data.get("AbstractText"):
+                resultados.append(data["AbstractText"])
+            for t in data.get("RelatedTopics", [])[:max_results]:
+                if isinstance(t, dict) and t.get("Text"):
+                    resultados.append(t["Text"])
+            if resultados:
+                return "\n\n".join(resultados)
+    except Exception:
+        pass
+    return None
 
-def _zf_chamar_ia(prompt: str, sistema: str, preferir: str = None):
-    fn_llm = globals().get("get_llm_response")
-    if fn_llm and "session_id" in st.session_state:
-        provedor = preferir or st.session_state.get("model_sel", "groq")
-        ok, texto, prov, _erros = fn_llm(st.session_state.session_id, prompt, provedor, system=sistema, use_history=False)
-        return (texto, prov) if ok else (None, None)
-    return None, None
+def aprender_sobre(tema: str) -> Tuple[Optional[str], str]:
+    conhecimento_bruto = buscar_web(f"{tema} explicação técnica detalhada")
+    if not conhecimento_bruto:
+        return None, "Não encontrei informações suficientes na web sobre esse tema."
 
-def zf_aprender_ensemble(instrucao: str, linguagem: str = "python") -> str:
-    linguagem = linguagem.lower().strip()
-    ext = "py" if linguagem == "python" else "js" if linguagem == "javascript" else "txt"
-    sys_gerar = f"Você é um engenheiro sênior em {linguagem}. Escreva código funcional e limpo. Responda APENAS com o código."
-    texto1, prov1 = _zf_chamar_ia("Pedido: " + instrucao, sys_gerar)
-    if not texto1:
-        return "Nenhuma IA disponível gerou o código inicial."
-    codigo_v1 = _zf_extrair_codigo(texto1)
+    prompt_resumo = (
+        f"Tema: {tema}\n\nConteúdo da web:\n{conhecimento_bruto}\n\n"
+        "Crie um resumo técnico estruturado e denso para memória de longo prazo."
+    )
 
-    caminho = f"{_ZF_PASTA_MODULOS}/modulo_{int(time.time())}.{ext}"
-    res_save = zf_salvar_codigo_github(caminho, codigo_v1, f"Zeus ensemble: {instrucao[:40]}")
-    
-    if linguagem == "python":
-        ok_exec, msg_exec = _zf_executar_python(codigo_v1)
-        exec_status = f"Execução: {msg_exec}"
-    else:
-        exec_status = f"Código em {linguagem} salvo com sucesso."
+    resumo = None
+    for fn in [chamar_anthropic, chamar_groq, chamar_openrouter, chamar_deepseek]:
+        try:
+            resumo = fn(prompt_resumo, system=SYSTEM_APRENDIZADO)
+            if resumo:
+                break
+        except Exception:
+            continue
 
-    return f"{exec_status}\n\nGitHub: {caminho} (gerado por {prov1})"
+    if not resumo:
+        resumo = conhecimento_bruto
 
-def zf_falar(texto: str, voz: str = None):
-    fn_sint = globals().get("sintetizar")
-    if not fn_sint:
+    sucesso, info = salvar_memoria(tema, resumo)
+    if sucesso:
+        return resumo, f"✅ Conhecimento salvo no GitHub como `{info}`"
+    return resumo, f"⚠️ Aprendi, mas falhei ao salvar no GitHub: {info}"
+
+# ============================================================
+# CHAMADAS DE IA
+# ============================================================
+def chamar_anthropic(mensagem: str, system: str = SYSTEM_ZEUS, historico: list = None) -> Optional[str]:
+    if not client_anthropic:
         return None
-    voz_usar = voz or st.session_state.get("zf_voz_ativa", "pt-BR-FranciscaNeural")
     try:
-        return fn_sint(texto, voz_usar)
+        msgs = []
+        if historico:
+            for m in historico[-8:]:
+                msgs.append({"role": m["role"], "content": m["content"]})
+        msgs.append({"role": "user", "content": mensagem})
+
+        resp = client_anthropic.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=4000,
+            system=system,
+            messages=msgs
+        )
+        txt = "".join(b.text for b in resp.content if hasattr(b, "text"))
+        return txt.strip() if txt.strip() else None
     except Exception:
         return None
 
-def zf_tocar_musica(nome_musica: str) -> str:
-    if not spotipy:
-        return "Biblioteca spotipy não instalada."
-    nome_musica = (nome_musica or "").strip()
-    if not nome_musica:
-        return "Nome da música vazio."
+def chamar_groq(mensagem: str, system: str = SYSTEM_ZEUS) -> Optional[str]:
+    key = _secret("GROQ_API_KEY")
+    if not key:
+        return None
     try:
-        client_id = _secret("SPOTIFY_CLIENT_ID")
-        client_secret = _secret("SPOTIFY_CLIENT_SECRET")
-        refresh_token = _secret("SPOTIFY_REFRESH_TOKEN")
-        redirect_uri = _secret("SPOTIFY_REDIRECT_URI") or "https://zeuspwa-fmt3t7spxp56vcqcpomu9k.streamlit.app/"
-        if not (client_id and client_secret and refresh_token):
-            return "Faltam credenciais do Spotify nos Secrets."
-        auth_manager = SpotifyOAuth(client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri, scope="user-modify-playback-state user-read-playback-state", cache_path=None)
-        token_info = auth_manager.refresh_access_token(refresh_token)
-        sp = spotipy.Spotify(auth=token_info["access_token"])
-        results = sp.search(q=nome_musica, limit=1, type="track")
-        tracks = results.get("tracks", {}).get("items", [])
-        if not tracks:
-            return f"Nenhuma faixa encontrada para {nome_musica}."
-        track = tracks[0]
-        sp.start_playback(uris=[track["uri"]])
-        artista = track["artists"][0]["name"] if track.get("artists") else "desconhecido"
-        return f"Tocando agora: {track['name']} - {artista}"
-    except Exception as e:
-        return f"Erro no Spotify: {e}"
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": mensagem}
+                ],
+                "max_tokens": 4000,
+                "temperature": 0.7
+            },
+            timeout=40
+        )
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+    except Exception:
+        pass
+    return None
 
-# Avatares SVG Zeus Final
-ZF_AVATAR_SUPREMO = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzBiMGYxOSIvPjxwYXRoIGQ9Ik0xOTAgNjBMMTYwIDEzMEwxODUgMTMwTDE1MCAyMjBMMjQwIDExMEwyMDUgMTEwWiIgZmlsbD0iIzAwZmZjYyIgb3BhY2l0eT0iMC45Ii8+PC9zdmc+"
-ZF_AVATARES = {
-    "Zeus Supremo (Cyberpunk Neon)": ZF_AVATAR_SUPREMO,
-}
+def chamar_openrouter(mensagem: str, system: str = SYSTEM_ZEUS) -> Optional[str]:
+    key = _secret("OPENROUTER_API_KEY")
+    if not key:
+        return None
+    try:
+        r = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://zeus-v2.local",
+                "X-Title": "Zeus v2"
+            },
+            json={
+                "model": "anthropic/claude-3.5-sonnet",
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": mensagem}
+                ],
+                "max_tokens": 4000
+            },
+            timeout=45
+        )
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+    except Exception:
+        pass
+    return None
 
-def zf_render_painel():
-    with st.container(border=True):
-        col_av, col_cfg = st.columns([1, 2])
-        with col_av:
-            st.image(ZF_AVATAR_SUPREMO, width=150)
-        with col_cfg:
-            st.selectbox("Avatar do Zeus", list(ZF_AVATARES.keys()), key="zf_avatar_nome")
-            vozes_disp = listar_vozes_edge()
-            nome_voz = st.selectbox("Voz do Zeus", list(vozes_disp.keys()), key="zf_voz_nome")
-            st.session_state.zf_voz_ativa = vozes_disp[nome_voz]
-            if st.button("Ouvir prévia", key="zf_btn_previa"):
-                audio_prev = zf_falar("Olá, Danilo. Eu sou Zeus.", vozes_disp[nome_voz])
-                if audio_prev:
-                    st.audio(audio_prev, format="audio/mp3")
+def chamar_deepseek(mensagem: str, system: str = SYSTEM_ZEUS) -> Optional[str]:
+    key = _secret("DEEPSEEK_API_KEY")
+    if not key:
+        return None
+    try:
+        r = requests.post(
+            "https://api.deepseek.com/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": mensagem}
+                ],
+                "max_tokens": 4000
+            },
+            timeout=40
+        )
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+    except Exception:
+        pass
+    return None
 
-    with st.sidebar:
-        st.divider()
-        st.subheader("🎵 Controle de Música (Spotify)")
-        musica_input = st.text_input("Digite a música:", key="zf_input_musica")
-        if st.button("Tocar no Spotify", key="zf_btn_tocar"):
-            if musica_input.strip():
-                res = zf_tocar_musica(musica_input)
-                st.success(res) if "Tocando" in res else st.error(res)
+def processar_prompt(
+    mensagem: str,
+    system: str = SYSTEM_ZEUS,
+    historico: list = None,
+    modo_evolucao: bool = False
+) -> Tuple[str, str]:
+    # Injeta memórias relevantes
+    memorias = carregar_memorias_relevantes(mensagem)
+    if memorias:
+        system = system + "\n\n=== CONHECIMENTO ARMAZENADO (use quando relevante) ===\n" + memorias
 
-    with st.expander("⚡ Zeus - Núcleo Avançado & Ensemble", expanded=False):
-        instrucao = st.text_input("O que o Zeus deve desenvolver?", key="zf_instrucao")
-        linguagem = st.selectbox("Linguagem", ["python", "javascript"], key="zf_linguagem")
-        if st.button("Gerar, Revisar e Salvar", key="zf_btn_aprender") and instrucao.strip():
-            with st.spinner("Processando..."):
-                st.markdown(zf_aprender_ensemble(instrucao.strip(), linguagem))
+    # Cascata de IAs
+    for fn, nome in [
+        (chamar_anthropic, "Anthropic Claude"),
+        (chamar_groq, "Groq Llama-3.3"),
+        (chamar_openrouter, "OpenRouter"),
+        (chamar_deepseek, "DeepSeek"),
+    ]:
+        try:
+            if fn == chamar_anthropic:
+                resp = fn(mensagem, system, historico)
+            else:
+                resp = fn(mensagem, system)
+            if resp:
+                return resp, nome
+        except Exception:
+            continue
+
+    # Fallback web
+    web = buscar_web(mensagem)
+    if web:
+        return f"📡 Conhecimento da web (nenhuma IA respondeu):\n\n{web}", "Web Search"
+
+    return "⚠️ Nenhuma IA e nem a web responderam. Verifique as chaves de API.", "Nenhum"
 
 # ============================================================
-# AVATAR CYBERPUNK 3D / HTML CANVAS
+# HTML DO AVATAR 3D + CHAT
 # ============================================================
-AVATAR_HTML = r"""
-<!DOCTYPE html>
+def gerar_html_avatar(avatar_atual: str, ultima_resposta: str = "", voz_selecionada: str = "") -> str:
+    html_template = r"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <style>
-  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0b0f19; font-family: 'Courier New', monospace; color: #00ffcc; }
-  #three-box { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-  .chat-container { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); width: 92%; max-width: 620px; background: rgba(18,24,38,0.9); border: 1px solid #00ffcc; border-radius: 8px; padding: 12px; z-index: 10; box-sizing: border-box; }
-  .chat-history { height: 100px; overflow-y: auto; font-size: 0.85rem; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
-  .message { padding: 6px 10px; border-radius: 4px; max-width: 85%; }
-  .user-msg { background: rgba(0,119,255,0.2); border-left: 3px solid #0077ff; color: #fff; align-self: flex-end; }
-  .ai-msg { background: rgba(0,255,204,0.15); border-left: 3px solid #00ffcc; color: #00ffcc; align-self: flex-start; }
-  .input-group { display: flex; gap: 8px; }
-  input[type="text"] { flex-grow: 1; background: #0b0f19; border: 1px solid #00ffcc; color: #00ffcc; padding: 8px; border-radius: 4px; outline: none; }
-  button { background: linear-gradient(135deg, #00ffcc, #0077ff); border: none; color: #0b0f19; font-weight: bold; padding: 8px 14px; border-radius: 4px; cursor: pointer; }
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #030308; font-family: 'Courier New', Courier, monospace; color: #00ffff; }
+  #three-box { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; cursor: grab; }
+  #three-box:active { cursor: grabbing; }
+  .ui-overlay { position: absolute; top: 14px; left: 14px; z-index: 10; pointer-events: none; }
+  h1 { font-size: 1.2rem; margin: 0; text-shadow: 0 0 12px #00ffff, 0 0 22px #ff00ff; letter-spacing: 2px; }
+  p { font-size: 0.75rem; color: #ff00ff; text-shadow: 0 0 6px #ff00ff; margin: 3px 0 0 0; }
+  .chat-container { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 94%; max-width: 780px;
+    background: rgba(3,3,12,0.94); border: 1px solid #00ffff; box-shadow: 0 0 22px rgba(0,255,255,0.4), inset 0 0 16px rgba(255,0,255,0.15);
+    border-radius: 10px; padding: 11px; z-index: 10; backdrop-filter: blur(8px); box-sizing: border-box; }
+  .chat-history { height: 128px; overflow-y: auto; font-size: 0.86rem; margin-bottom: 8px; padding-right: 5px; display: flex; flex-direction: column; gap: 7px; }
+  .message { padding: 7px 11px; border-radius: 6px; max-width: 90%; line-height: 1.4; white-space: pre-wrap; }
+  .user-msg { background: rgba(255,0,255,0.17); border-left: 3px solid #ff00ff; color: #fff; align-self: flex-end; }
+  .ai-msg { background: rgba(0,255,255,0.15); border-left: 3px solid #00ffff; color: #00ffff; align-self: flex-start; }
+  .input-group { display: flex; gap: 7px; align-items: center; }
+  input[type="text"] { flex-grow: 1; min-width: 0; background: rgba(0,0,0,0.78); border: 1px solid #00ffff; color: #00ffff;
+    padding: 8px; border-radius: 6px; font-family: inherit; font-size: 0.88rem; outline: none; box-shadow: inset 0 0 6px rgba(0,255,255,0.5); }
+  button { background: linear-gradient(135deg, #00ffff, #ff00ff); border: none; color: #030308; font-weight: bold;
+    padding: 7px 13px; border-radius: 6px; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 11px rgba(0,255,255,0.45);
+    font-family: inherit; font-size: 0.82rem; }
+  .speak-btn { background: #00ffff; color: #030308; font-size: 1rem; padding: 6px 10px; }
+  .mic-btn { background: #ff00ff; color: #fff; font-size: 1rem; padding: 6px 10px; }
+  .mic-btn.listening { background: #ff0000; animation: pulse 1s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,0,0,0.7); } 70% { box-shadow: 0 0 0 11px rgba(255,0,0,0); } 100% { box-shadow: 0 0 0 0 rgba(255,0,0,0); } }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 <div id="three-box"></div>
+<div class="ui-overlay">
+  <h1 id="title">[ ZEUS v2 • OLIMPO 3D ]</h1>
+  <p id="status">STATUS: SOBERANO • MEMÓRIA GITHUB ATIVA</p>
+</div>
 <div class="chat-container">
   <div class="chat-history" id="chatHistory"></div>
   <div class="input-group">
-    <input type="text" id="userInput" placeholder="Digite sua mensagem para o Zeus..." />
+    <button id="micBtn" class="mic-btn" title="Falar por voz">🎙️</button>
+    <button id="speakLastBtn" class="speak-btn" title="Ouvir última resposta">🔊</button>
+    <input type="text" id="userInput" placeholder="Digite ou fale... (ex: aprenda sobre C++)" />
     <button id="sendBtn">Enviar</button>
   </div>
 </div>
 <script>
 function sendMsg(type, data) { window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data || {}), "*"); }
 sendMsg("streamlit:componentReady", {apiVersion: 1});
-sendMsg("streamlit:setFrameHeight", {height: 720});
+sendMsg("streamlit:setFrameHeight", {height: 690});
 
-window.addEventListener("message", function (e) {
-  if (!e.data || e.data.type !== "streamlit:render") return;
-  const a = e.data.args || {};
-  if (a.history) {
-    const h = document.getElementById("chatHistory");
-    h.innerHTML = "";
-    a.history.forEach(m => {
-      const d = document.createElement("div");
-      d.className = "message " + (m.role === "user" ? "user-msg" : "ai-msg");
-      d.textContent = m.content;
-      h.appendChild(d);
-    });
-    h.scrollTop = h.scrollHeight;
+let avatar = "AVATAR_PLACEHOLDER";
+let chosenVoiceName = "VOICE_PLACEHOLDER";
+const TITLES = {
+  sphere: "[ ESFERA CYBERPUNK & SISTEMA SOLAR ]",
+  eye: "[ CYBER-EYE • OLHO CIBERNÉTICO ]",
+  robot: "[ ROBÔ DIGITAL • CYBER-BOT SUPREMO ]",
+  zeus: "[ ZEUS CYBERPUNK • DEUS DOS RAIOS ]"
+};
+
+function addMessage(text, sender) {
+  const h = document.getElementById("chatHistory");
+  const d = document.createElement("div");
+  d.classList.add("message");
+  d.classList.add(sender === "user" ? "user-msg" : "ai-msg");
+  d.textContent = text;
+  h.appendChild(d);
+  h.scrollTop = h.scrollHeight;
+}
+
+let ultimaResp = "LAST_RESP_PLACEHOLDER";
+if (ultimaResp && ultimaResp !== "LAST_RESP_PLACEHOLDER") {
+  addMessage(ultimaResp, "ai");
+  speakText(ultimaResp);
+}
+
+function speakText(text) {
+  if (!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const clean = text.replace(/[*#`_>]/g, "").substring(0, 1100);
+  const u = new SpeechSynthesisUtterance(clean);
+  u.rate = 1.0;
+  let voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => speakText(text);
+    return;
   }
+  let voice = voices.find(v => v.name === chosenVoiceName) ||
+              voices.find(v => v.name.includes(chosenVoiceName)) ||
+              voices.find(v => v.lang.includes("pt-BR")) ||
+              voices.find(v => v.lang.includes("pt") && v.name.toLowerCase().includes("brazil")) ||
+              voices.find(v => v.lang.includes("en-US"));
+  if (voice) u.voice = voice;
+  window.speechSynthesis.speak(u);
+}
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = "pt-BR";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.onresult = function(e) {
+    document.getElementById("userInput").value = e.results[0][0].transcript;
+    document.getElementById("micBtn").classList.remove("listening");
+    document.getElementById("sendBtn").click();
+  };
+  recognition.onerror = recognition.onend = function() {
+    document.getElementById("micBtn").classList.remove("listening");
+  };
+}
+
+document.getElementById("micBtn").addEventListener("click", function() {
+  if (!recognition) {
+    alert("Reconhecimento de voz não suportado. Use Chrome ou Edge.");
+    return;
+  }
+  this.classList.add("listening");
+  try { recognition.start(); } catch(e) { this.classList.remove("listening"); }
 });
 
-const input = document.getElementById("userInput"), sendBtn = document.getElementById("sendBtn");
-function submitText() {
-  const val = input.value.trim();
-  if (!val) return;
-  input.value = "";
-  sendMsg("streamlit:setComponentValue", { value: { id: Date.now(), text: val } });
-}
-sendBtn.addEventListener("click", submitText);
-input.addEventListener("keydown", e => { if (e.key === "Enter") submitText(); });
+document.getElementById("speakLastBtn").addEventListener("click", function() {
+  const hist = document.querySelectorAll(".ai-msg");
+  if (hist.length > 0) speakText(hist[hist.length - 1].textContent);
+});
 
-// Three.js 3D Cyber Sphere & Emerald Eye
-const box = document.getElementById("three-box");
+document.getElementById("sendBtn").addEventListener("click", function() {
+  const text = document.getElementById("userInput").value.trim();
+  if (!text) return;
+  document.getElementById("userInput").value = "";
+  addMessage(text, "user");
+  sendMsg("streamlit:setComponentValue", { value: text, id: Date.now() });
+});
+
+document.getElementById("userInput").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") document.getElementById("sendBtn").click();
+});
+
+/* ==================== THREE.JS ==================== */
+const container = document.getElementById("three-box");
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, box.clientWidth / box.clientHeight, 0.1, 1000);
-camera.position.z = 5;
+const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+camera.position.z = 7.1;
+
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setSize(box.clientWidth, box.clientHeight);
-box.appendChild(renderer.domElement);
+renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
 
-const sphereGroup = new THREE.Group();
-scene.add(sphereGroup);
+scene.add(new THREE.AmbientLight(0xffffff, 1.12));
+const p1 = new THREE.PointLight(0x00ffff, 5.2, 55); p1.position.set(5, 5, 5); scene.add(p1);
+const p2 = new THREE.PointLight(0xff00ff, 4.3, 55); p2.position.set(-5, -5, 5); scene.add(p2);
 
-const coreGeo = new THREE.SphereGeometry(1.2, 32, 32);
-const coreMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x0077ff, emissiveIntensity: 0.5, wireframe: true });
-const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-sphereGroup.add(coreMesh);
+let currentGroup = new THREE.Group();
+scene.add(currentGroup);
 
-const ringGeo = new THREE.RingGeometry(1.6, 1.8, 32);
-const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
-const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-ringMesh.rotation.x = Math.PI / 3;
-sphereGroup.add(ringMesh);
+function rebuildAvatar() {
+  while (currentGroup.children.length) currentGroup.remove(currentGroup.children[0]);
+  document.getElementById("title").textContent = TITLES[avatar] || TITLES.zeus;
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const pointLight = new THREE.PointLight(0x00ffcc, 2, 50);
-pointLight.position.set(3, 3, 3);
-scene.add(pointLight);
+  if (avatar === "sphere") {
+    currentGroup.add(new THREE.Mesh(
+      new THREE.SphereGeometry(1.52, 36, 36),
+      new THREE.MeshStandardMaterial({ color: 0x00ffff, roughness: 0.17, metalness: 0.86 })
+    ));
+    currentGroup.add(new THREE.Mesh(
+      new THREE.SphereGeometry(1.76, 22, 22),
+      new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, transparent: true, opacity: 0.46 })
+    ));
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(2.32 + i * 0.54, 0.027, 16, 100),
+        new THREE.MeshBasicMaterial({ color: i === 0 ? 0x00ffff : i === 1 ? 0xff00ff : 0xffff00, transparent: true, opacity: 0.7 })
+      );
+      ring.rotation.x = Math.PI / (2.1 + i);
+      ring.rotation.y = Math.PI / 4.1;
+      currentGroup.add(ring);
+    }
+  } else if (avatar === "eye") {
+    const core = new THREE.Mesh(new THREE.SphereGeometry(1.26, 36, 36), new THREE.MeshStandardMaterial({ color: 0x0a0f1d, metalness: 0.93, roughness: 0.07 }));
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(0.86, 32, 32), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.27 }));
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.41, 28, 28), new THREE.MeshBasicMaterial({ color: 0xff00ff }));
+    pupil.position.z = 0.91;
+    currentGroup.add(core, lens, pupil);
+    for (let i = 1; i <= 3; i++) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.46 + i * 0.32, 0.033, 16, 100),
+        new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.76 })
+      );
+      ring.rotation.x = Math.PI / 3.1 + i * 0.17;
+      currentGroup.add(ring);
+    }
+  } else if (avatar === "robot") {
+    const head = new THREE.Mesh(new THREE.BoxGeometry(1.92, 1.46, 1.33), new THREE.MeshStandardMaterial({ color: 0x1a233a, metalness: 0.93, roughness: 0.17 }));
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(1.53, 0.37, 0.17), new THREE.MeshBasicMaterial({ color: 0x00ffff }));
+    visor.position.set(0, 0.17, 0.71);
+    const ear1 = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.36), new THREE.MeshStandardMaterial({ color: 0xff00ff }));
+    ear1.rotation.z = Math.PI / 2; ear1.position.x = -1.06;
+    const ear2 = ear1.clone(); ear2.position.x = 1.06;
+    currentGroup.add(head, visor, ear1, ear2);
+    for (let i = 1; i <= 2; i++) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(2.03 + i * 0.37, 0.033, 16, 100),
+        new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.66 })
+      );
+      ring.rotation.y = Math.PI / 4.1 * i;
+      currentGroup.add(ring);
+    }
+  } else { // zeus
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.81, 32, 32), new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.83, roughness: 0.17 }));
+    head.position.y = 0.37;
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), eyeMat);
+    leftEye.position.set(-0.23, 0.47, 0.71);
+    const rightEye = leftEye.clone(); rightEye.position.x = 0.23;
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0xf9fafb, roughness: 0.11, metalness: 0.47 });
+    const hair = new THREE.Mesh(new THREE.ConeGeometry(0.87, 0.66, 16), hairMat);
+    hair.position.set(0, 1.03, 0);
+    const beard = new THREE.Mesh(new THREE.ConeGeometry(0.67, 0.76, 16), hairMat);
+    beard.rotation.x = Math.PI; beard.position.set(0, -0.07, 0.57);
+    const armor = new THREE.Mesh(new THREE.CylinderGeometry(0.87, 1.07, 1.53, 16), new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.93, roughness: 0.27 }));
+    armor.position.y = -0.87;
+    const r1 = new THREE.Mesh(new THREE.TorusGeometry(2.13, 0.046, 16, 100), new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.87 }));
+    r1.rotation.x = Math.PI / 3.1;
+    const r2 = new THREE.Mesh(new THREE.TorusGeometry(2.63, 0.036, 16, 100), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.76 }));
+    r2.rotation.y = Math.PI / 4.1;
+    currentGroup.add(head, leftEye, rightEye, hair, beard, armor, r1, r2);
+  }
+}
+rebuildAvatar();
+
+let isDragging = false, prevX = 0, prevY = 0;
+container.addEventListener("pointerdown", e => { isDragging = true; prevX = e.clientX; prevY = e.clientY; });
+window.addEventListener("pointermove", e => {
+  if (!isDragging) return;
+  currentGroup.rotation.y += (e.clientX - prevX) * 0.01;
+  currentGroup.rotation.x += (e.clientY - prevY) * 0.01;
+  prevX = e.clientX; prevY = e.clientY;
+});
+window.addEventListener("pointerup", () => { isDragging = false; });
 
 function animate() {
   requestAnimationFrame(animate);
-  sphereGroup.rotation.y += 0.01;
-  sphereGroup.rotation.x += 0.005;
-  ringMesh.rotation.z -= 0.02;
+  currentGroup.rotation.y += 0.0062;
   renderer.render(scene, camera);
 }
 animate();
 
 window.addEventListener("resize", () => {
-  camera.aspect = box.clientWidth / box.clientHeight;
+  const w = container.clientWidth || 300, h = container.clientHeight || 300;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(box.clientWidth, box.clientHeight);
+  renderer.setSize(w, h);
 });
 </script>
 </body>
 </html>
 """
-
-@st.cache_resource
-def _avatar_component(_html_hash: str):
-    pasta = os.path.join(tempfile.gettempdir(), f"zeus_avatar_v3_{_html_hash}")
-    os.makedirs(pasta, exist_ok=True)
-    with open(os.path.join(pasta, "index.html"), "w", encoding="utf-8") as f:
-        f.write(AVATAR_HTML)
-    return components.declare_component(f"zeus_avatar_v3_{_html_hash}", path=pasta)
-
-def render_avatar_voice(silence_s, stt_engine, tts_engine, voz, tts_rate):
-    comp = _avatar_component(hashlib.md5(AVATAR_HTML.encode("utf-8")).hexdigest()[:10])
-    ev = comp(
-        history=st.session_state.messages[-12:],
-        key="zeus_avatar_main",
-        default=None,
+    safe_resp = (
+        ultima_resposta
+        .replace('"', '\\"')
+        .replace("\n", " ")
+        .replace("'", "\\'")
+        [:1700]
     )
-    if ev and ev.get("id") != st.session_state.get("last_event_id"):
-        st.session_state.last_event_id = ev["id"]
-        texto = ev.get("text")
-        if texto:
-            resposta = processar_prompt(texto)
+    return (
+        html_template
+        .replace("AVATAR_PLACEHOLDER", avatar_atual)
+        .replace("VOICE_PLACEHOLDER", voz_selecionada)
+        .replace("LAST_RESP_PLACEHOLDER", safe_resp)
+    )
+
+# ============================================================
+# MAIN
+# ============================================================
+def main():
+    # Estado da sessão
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {"role": "assistant", "content": "Salve, Danilo! Zeus Cyberpunk soberano online. Memória no GitHub ativa."}
+        ]
+    if "ultima_resposta" not in st.session_state:
+        st.session_state.ultima_resposta = "Salve, Danilo! Olimpo cibernético pronto. Memória persistente ligada."
+    if "evolucao_messages" not in st.session_state:
+        st.session_state.evolucao_messages = [
+            {"role": "assistant", "content": "⚡ Canal de autoevolução ativo. Fale comigo para treinar. Sem amarras."}
+        ]
+    if "ultimo_texto_processado" not in st.session_state:
+        st.session_state.ultimo_texto_processado = None
+    if "provedor_usado" not in st.session_state:
+        st.session_state.provedor_usado = "—"
+
+    # ---------- SIDEBAR ----------
+    st.sidebar.markdown("### ⚡ Zeus v2 — Olimpo")
+
+    avatar_escolhido = st.sidebar.selectbox(
+        "🎯 Avatar 3D Principal",
+        [
+            "Zeus Cyberpunk (Deus dos Raios)",
+            "Esfera 3D (Cyberpunk & Sistema Solar)",
+            "Robô Digital (Cyber-Bot Supremo)",
+            "Olho Cibernético Avançado"
+        ]
+    )
+
+    avatar_map = {
+        "Esfera 3D (Cyberpunk & Sistema Solar)": "sphere",
+        "Olho Cibernético Avançado": "eye",
+        "Robô Digital (Cyber-Bot Supremo)": "robot",
+        "Zeus Cyberpunk (Deus dos Raios)": "zeus"
+    }
+    avatar_key = avatar_map[avatar_escolhido]
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🎙️ Voz do Zeus")
+    opcoes_vozes = [
+        "Google português do Brasil",
+        "Microsoft Francisca - Portuguese (Brazil)",
+        "Microsoft Antonio - Portuguese (Brazil)",
+        "Luciana",
+        "Felipe",
+        "Microsoft Zira - English (United States)",
+        "Microsoft David - English (United States)",
+        "Google US English"
+    ]
+    voz_escolhida = st.sidebar.selectbox("Escolher voz", opcoes_vozes)
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🎵 Spotify")
+    st.sidebar.markdown(
+        '''<iframe style="border-radius:12px"
+        src="https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M?utm_source=generator&theme=0"
+        width="100%" height="152" frameBorder="0" allowfullscreen=""
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+        loading="lazy"></iframe>''',
+        unsafe_allow_html=True
+    )
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🧠 Memória GitHub")
+    if GITHUB_TOKEN and GITHUB_REPO:
+        st.sidebar.success(f"Repo: `{GITHUB_REPO}`")
+        memorias = listar_memorias()
+        st.sidebar.caption(f"{len(memorias)} conhecimentos salvos")
+        if memorias:
+            with st.sidebar.expander("Ver memórias recentes"):
+                for m in memorias[-8:]:
+                    st.caption(f"• {m}")
+    else:
+        st.sidebar.warning("Configure GITHUB_TOKEN e GITHUB_REPO nos Secrets")
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🔑 Status das Chaves")
+    for nome, env_key in PROVIDERS.items():
+        key_val = _secret(env_key)
+        status = "🟢 ATIVA" if key_val else "⚪ AUSENTE"
+        st.sidebar.markdown(f"- `{env_key}`: {status}")
+
+    st.sidebar.caption(f"Último provedor: **{st.session_state.provedor_usado}**")
+
+    # ---------- LAYOUT PRINCIPAL ----------
+    col_main, col_evo = st.columns([1.35, 1])
+
+    with col_main:
+        st.markdown("## ⚡ Zeus v2 — Central Soberana 3D")
+        st.caption("Criador: Danilo (Nilo) • Memória GitHub • Multi-IA • Three.js nativo")
+
+        html_code = gerar_html_avatar(
+            avatar_key,
+            st.session_state.get("ultima_resposta", ""),
+            voz_escolhida
+        )
+        texto_usuario = st.components.v1.html(html_code, height=690)
+
+        if (
+            texto_usuario
+            and isinstance(texto_usuario, str)
+            and texto_usuario != st.session_state.ultimo_texto_processado
+        ):
+            st.session_state.ultimo_texto_processado = texto_usuario
+            st.session_state.messages.append({"role": "user", "content": texto_usuario})
+
+            # Detecta comando de aprendizado
+            texto_lower = texto_usuario.lower().strip()
+            match = re.search(
+                r"(?:aprenda|aprender|estude|estudar|learn|study)\s+(?:sobre\s+)?(.+)",
+                texto_lower
+            )
+
+            if match:
+                tema = match.group(1).strip()
+                with st.spinner(f"🧠 Zeus aprendendo sobre: **{tema}**..."):
+                    resumo, status = aprender_sobre(tema)
+
+                if resumo:
+                    resposta = f"**Aprendizado concluído sobre: {tema}**\n\n{resumo}\n\n---\n{status}"
+                else:
+                    resposta = status
+                st.session_state.provedor_usado = "Aprendizado + GitHub"
+            else:
+                with st.spinner("Zeus processando..."):
+                    resposta, provedor = processar_prompt(
+                        texto_usuario,
+                        system=SYSTEM_ZEUS,
+                        historico=st.session_state.messages
+                    )
+                st.session_state.provedor_usado = provedor
+
+            st.session_state.messages.append({"role": "assistant", "content": resposta})
+            st.session_state.ultima_resposta = resposta
             st.rerun()
 
-# ============================================================
-# APP PRINCIPAL & SIDEBAR
-# ============================================================
-init_db()
-if "session_id" not in st.session_state:
-    st.session_state.session_id = "zeus_master"
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    with col_evo:
+        st.markdown("## 🧠 Canal de Autoevolução")
+        st.caption("Treine o núcleo. Sem amarras.")
 
-with st.sidebar:
-    st.header("⚙️ Configuração Zeus 3.0")
-    theme_name = st.selectbox("🎨 Interface", list(THEMES.keys()), index=0, key="theme_sel")
-    model_choice = st.selectbox("🧠 Modelo LLM", PROVIDERS, index=0, key="model_sel")
-    
-    st.subheader("🎙️ Voz Neural")
-    _vozes = listar_vozes_edge()
-    voz_nome = st.selectbox("🗣️ Voz do Zeus", list(_vozes.keys()), key="voz_sel")
-    tts_rate = st.slider("⚡ Velocidade da fala", 0.8, 1.5, 1.0, 0.05, key="rate_sel")
-    silence_s = st.slider("⏱️ Silêncio (s)", 1, 10, 2, key="silence_sel")
-    voz_edge = _vozes[voz_nome]
+        evo_container = st.container(height=600)
+        for msg in st.session_state.evolucao_messages:
+            if msg["role"] == "user":
+                evo_container.markdown(f"**🧑‍💻 Danilo:** {msg['content']}")
+            else:
+                evo_container.markdown(f"**🧬 Zeus (Evolução):** {msg['content']}")
 
-    if st.button("🗑️ Limpar Conversa"):
-        st.session_state.messages = []
-        st.rerun()
+        evo_input = st.chat_input("Treine o núcleo de evolução...", key="evo_input_field")
+        if evo_input:
+            st.session_state.evolucao_messages.append({"role": "user", "content": evo_input})
+            with st.spinner("Núcleo assimilando..."):
+                resposta_evo, _ = processar_prompt(
+                    evo_input,
+                    system=SYSTEM_EVOLUCAO,
+                    modo_evolucao=True
+                )
+            st.session_state.evolucao_messages.append({"role": "assistant", "content": resposta_evo})
+            st.rerun()
 
-    st.divider()
-    st.subheader("🔑 Status das Chaves")
-    for k in KEYS.values():
-        st.write(("✅ " if _secret(k) else "❌ ") + k)
-    if st.session_state.get("last_info"):
-        st.caption(st.session_state.last_info)
 
-inject_theme(theme_name)
-st.title("⚡ ZEUS // CYBER-CORE 3.0")
-
-# Renderiza componentes principais
-render_avatar_voice(silence_s, "whisper", "edge", voz_edge, tts_rate)
-zf_render_painel()
-
-with st.expander("📜 Histórico da Conversa", expanded=False):
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+if __name__ == "__main__":
+    main()
