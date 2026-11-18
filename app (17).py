@@ -299,7 +299,6 @@ function speakText(text) {
   window.speechSynthesis.speak(utterance);
 }
 
-// Carrega as vozes antecipadamente para garantir a seleção correta
 if ('speechSynthesis' in window) {
   window.speechSynthesis.onvoiceschanged = function() {
     window.speechSynthesis.getVoices();
@@ -544,9 +543,6 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🎙️ Configuração de Voz Dinâmica")
-    
-    # JavaScript injetuado para listar as vozes reais do navegador dinamicamente no Streamlit se possível,
-    # ou seletores robustos com fallback.
     opcoes_vozes = [
         "Google português do Brasil",
         "Luciana",
@@ -597,9 +593,8 @@ def main():
 
     if texto_usuario and isinstance(texto_usuario, str) and texto_usuario != st.session_state.get("ultimo_texto_processado"):
         st.session_state["ultimo_texto_processado"] = texto_usuario
-        st.session_state.messages.append({"role":="user", "content": texto_usuario})
+        st.session_state.messages.append({"role": "user", "content": texto_usuario})
         
-        # PROCESSAMENTO EM CASCATA ROBUSTA COM SALVAMENTO DE APRENDIZADO
         resposta = processar_ia_cascade(texto_usuario)
             
         st.session_state.messages.append({"role": "assistant", "content": resposta})
