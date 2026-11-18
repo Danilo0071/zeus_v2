@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #030308; font-family: 'Courier New', Courier, monospace; color: #00ffff; }
+  #three-box, #c2 { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+  #voiceSel { position: absolute; top: 14px; right: 14px; z-index: 11; background: #030308; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px; padding: 4px; max-width: 45%; font-family: inherit; font-size: 0.75rem; }
+  .ui-overlay { position: absolute; top: 16px; left: 16px; z-index: 10; pointer-events: none; }
+  h1 { font-size: 1.4rem; margin: 0; text-shadow: 0 0 12px #00ffff, 0 0 25px #ff00ff; letter-spacing: 2px; }
+  p { font-size: 0.85rem; color: #ff00ff; text-shadow: 0 0 6px #ff00ff; margin: 5px 0 0 0; }
+  .chat-container { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); width: 95%; max-width: 780px; background: rgba(3,3,12,0.92); border: 1px solid #00ffff; box-shadow: 0 0 25px rgba(0,255,255,0.4), inset 0 0 20px rgba(255,0,255,0.25); border-radius: 10px; padding: 16px; z-index: 10; backdrop-filter: blur(8px); box-sizing: border-box; }
+  .chat-history { height: 175px; overflow-y: auto; font-size: 0.92rem; margin-bottom: 12px; padding-right: 8px; display: flex; flex-direction: column; gap: 10px; }
+  .message { padding: 10px 14px; border-radius: 6px; max-width: 88%; line-height: 1.45; white-space: pre-wrap; }
+  .user-msg { background: rgba(255,0,255,0.18); border-left: 3px solid #ff00ff; color: #fff; align-self: flex-end; }
+  .ai-msg { background: rgba(0,255,255,0.18); border-left: 3px solid #00ffff; color: #00ffff; align-self: flex-start; }
+  .input-group { display: flex; gap: 10px; }
+  input[type="text"] { flex-grow: 1; min-width: 0; background: rgba(0,0,0,0.75); border: 1px solid #00ffff; color: #00ffff; padding: 12px; border-radius: 6px; font-family: inherit; font-size: 0.95rem; outline: none; box-shadow: inset 0 0 8px rgba(0,255,255,0.6); }
+  button { background: linear-gradient(135deg, #00ffff, #ff00ff); border: none; color: #030308; font-weight: bold; padding: 12px 20px; border-radius: 6px; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 12px rgba(0,255,255,0.6); font-family: inherit; font-size: 0.9rem; }
+  .mic-btn { background: #ff00ff; color: #fff; }
+  .mic-btn.on { background: #ff0000; animation: pulse 1s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,0,0,0.7); } 70% { box-shadow: 0 0 0 12px rgba(255,0,0,0); } 100% { box-shadow: 0 0 0 0 rgba(255,0,0,0); } }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+<div id="three-box"></div>
+<canvas id="c2"></canvas>
+<select id="voiceSel" style="display:none"></select>
+<div class="ui-overlay">
+  <h1 id="title">[ ZEUS v2 • OLIMPO 3D ]</h1>
+  <p id="status">STATUS: ONLINE • AUTONOMIA TOTAL</p>
+</div>
+<div class="chat-container">
+  <div class="chat-history" id="chatHistory"></div>
+  <div class="input-group">
+    <button id="micBtn" class="mic-btn" title="Voz: fale e aguarde o silêncio">🎙️</button>
+    <input type="text" id="userInput" placeholder="Digite, ou clique 🎙️ e fale..." />
+    <button id="sendBtn">Enviar</button>
+  </div>
+</div>
+<script>
+function sendMsg(type, data) { window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data || {}), "*"); }
+sendMsg("streamlit:componentReady", {apiVersion: 1});
+sendMsg("streamlit:setFrameHeight", {height: 750});
+
+let avatar = "sphere", SILENCE = 2, STT = "whisper", TTS = "edge", TTS_RATE = 1;
+let initialized = false, lastReplyId = 0, pendingEl = null, pendingUserEl = null;
+let state = "idle", pulse = 0;
+const TITLES = { sphere: "[ ZEUS SPHERE v3.0 ]", eye: "[ CYBER-EYE v3.0 ]", robot: "[ CYBER-BOT v3.0 ]", zeus: "[ ZEUS MITOLÓGICO v3.0 ]" };
+const STATE_TXT = { idle: "ONLINE • LIVRE", listening: "OUVINDO", thinking: "PROCESSANDO", speaking: "FALANDO" };
+const statusEl = document.getElementById("status"), input = document.getElementById("userInput");
+
+window.addEventListener("message", function (e) {
+  if (!e.data || e.data.type !== "streamlit:render") return;
+  const a = e.data.args || {};
+  if (a.avatar && a.avatar !== avatar) { avatar = a.avatar; applyAvatar(); }
+  else if (!initialized) { applyAvatar(); }
+  if (!initialized) {
+    initialized = true;
+    (a.history || []).forEach(function (m) { addMessage(m.content, m.role === "user" ? "user" : "ai"); });
+    lastReplyId = a.reply_id || 0;
+    return;
+  }
+  if (a.reply_id !== lastReplyId) {
+    lastReplyId = a.reply_id;
+    if (pendingEl) { pendingEl.remove(); pendingEl = null; }
+    if (pendingUserEl) { pendingUserEl.remove(); pendingUserEl = null; }
+    if (a.reply) addMessage(a.reply, "ai");
+  }
+});
+
+function addMessage(text, sender) {
+  const h = document.getElementById("chatHistory");
+  const d = document.createElement("div");
+  d.classList.add("message"); d.classList.add(sender === "user" ? "user-msg" : "ai-msg");
+  d.textContent = text; h.appendChild(d); h.scrollTop = h.scrollHeight;
+  return d;
+}
+
+document.getElementById("sendBtn").addEventListener("click", function () {
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  addMessage(text, "user");
+  pendingEl = addMessage("⏳ processando...", "ai");
+  sendMsg("streamlit:setComponentValue", { value: { id: Date.now(), text: text }, dataType: "json" });
+});
+input.addEventListener("keydown", function (e) {
+  if (e.key === "Enter") document.getElementById("sendBtn").click();
+});
+
+const HAS3 = typeof THREE !== "undefined";
+const box = document.getElementById("three-box");
+let scene, camera, renderer, sphereGroup, wireMaterial;
+function onResize() {
+  const w = box.clientWidth || 300, h = box.clientHeight || 300;
+  if (renderer) { camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h); }
+}
+if (HAS3) {
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000); camera.position.z = 6;
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); box.appendChild(renderer.domElement);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  sphereGroup = new THREE.Group(); scene.add(sphereGroup);
+  sphereGroup.add(new THREE.Mesh(new THREE.SphereGeometry(2, 32, 32), new THREE.MeshStandardMaterial({ color: 0x00ffff, roughness: 0.2 })));
+}
+function applyAvatar() {
+  document.getElementById("title").textContent = TITLES[avatar] || TITLES.sphere;
+}
+window.addEventListener("resize", onResize); onResize();
+function frame() {
+  requestAnimationFrame(frame);
+  if (HAS3 && renderer) {
+    sphereGroup.rotation.y += 0.01;
+    renderer.render(scene, camera);
+  }
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
