@@ -101,15 +101,15 @@ def responder_auto_evolucao(mensagem):
         return f"⚡ [ZEUS AUTOEVOLUÇÃO]: Comando '{mensagem}' assimilado pela minha base de conhecimento local."
 
 def gerar_html_avatar(avatar_atual):
-    return f"""<!DOCTYPE html>
+    html_template = """<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <style>
-  body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #030308; font-family: 'Courier New', Courier, monospace; }}
-  #three-canvas {{ width: 100%; height: 100%; display: block; cursor: grab; }}
-  #three-canvas:active {{ cursor: grabbing; }}
-  .overlay-title {{ position: absolute; top: 15px; left: 15px; color: #00ffff; text-shadow: 0 0 10px #00ffff; pointer-events: none; z-index: 10; font-size: 1.1rem; }}
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #030308; font-family: 'Courier New', Courier, monospace; }
+  #three-canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+  #three-canvas:active { cursor: grabbing; }
+  .overlay-title { position: absolute; top: 15px; left: 15px; color: #00ffff; text-shadow: 0 0 10px #00ffff; pointer-events: none; z-index: 10; font-size: 1.1rem; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -122,7 +122,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(65, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
 camera.position.z = 6;
 
-const renderer = new THREE.WebGLRenderer({{ canvas: canvas, antialias: true, alpha: true }});
+const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
 renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -137,139 +137,140 @@ const pointLight2 = new THREE.PointLight(0xff00ff, 4, 50);
 pointLight2.position.set(-5, -5, 5);
 scene.add(pointLight2);
 
-let avatarType = "{avatar_atual}";
+let avatarType = "AVATAR_PLACEHOLDER";
 let group = new THREE.Group();
 scene.add(group);
 
-const TITLES = {{
+const TITLES = {
   sphere: "[ ESFERA CYBERPUNK & SISTEMA SOLAR ]",
   eye: "[ CYBER-EYE • OLHO CIBERNÉTICO ]",
   robot: "[ ROBÔ DIGITAL • CYBER-BOT ]",
   zeus: "[ ZEUS MITOLÓGICO • RAIO DIVINO ]"
-}};
+};
 
-function buildAvatar() {{
-  while(group.children.length > 0) {{ group.remove(group.children[0]); }}
+function buildAvatar() {
+  while(group.children.length > 0) { group.remove(group.children[0]); }
   document.getElementById('titleLabel').textContent = TITLES[avatarType] || TITLES.sphere;
 
-  if (avatarType === 'sphere') {{
+  if (avatarType === 'sphere') {
     const core = new THREE.Mesh(
       new THREE.SphereGeometry(1.5, 32, 32),
-      new THREE.MeshStandardMaterial({{ color: 0x00ffff, roughness: 0.2, metalness: 0.8, emissive: 0x005555 }})
+      new THREE.MeshStandardMaterial({ color: 0x00ffff, roughness: 0.2, metalness: 0.8, emissive: 0x005555 })
     );
     group.add(core);
 
     const wire = new THREE.Mesh(
       new THREE.SphereGeometry(1.75, 24, 24),
-      new THREE.MeshBasicMaterial({{ color: 0xff00ff, wireframe: true, transparent: true, opacity: 0.6 }})
+      new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, transparent: true, opacity: 0.6 })
     );
     group.add(wire);
 
-    for(let i=0; i<3; i++) {{
+    for(let i=0; i<3; i++) {
       const radius = 2.3 + i * 0.6;
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(radius, 0.03, 16, 100),
-        new THREE.MeshBasicMaterial({{ color: i === 0 ? 0x00ffff : i === 1 ? 0xff00ff : 0xffff00, transparent: true, opacity: 0.75 }})
+        new THREE.MeshBasicMaterial({ color: i === 0 ? 0x00ffff : i === 1 ? 0xff00ff : 0xffff00, transparent: true, opacity: 0.75 })
       );
       ring.rotation.x = Math.PI / (2 + i);
       ring.rotation.y = Math.PI / 4;
       group.add(ring);
-    }}
-  }} else if (avatarType === 'eye') {{
+    }
+  } else if (avatarType === 'eye') {
     const eyeCore = new THREE.Mesh(
       new THREE.SphereGeometry(1.3, 32, 32),
-      new THREE.MeshBasicMaterial({{ color: 0x050814 }})
+      new THREE.MeshBasicMaterial({ color: 0x050814 })
     );
     const pupil = new THREE.Mesh(
       new THREE.SphereGeometry(0.55, 32, 32),
-      new THREE.MeshBasicMaterial({{ color: 0xffff00 }})
+      new THREE.MeshBasicMaterial({ color: 0xffff00 })
     );
     pupil.position.z = 0.85;
     group.add(eyeCore, pupil);
 
-    for(let i=1; i<=3; i++) {{
+    for(let i=1; i<=3; i++) {
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(1.5 + i*0.4, 0.04, 16, 100),
-        new THREE.MeshBasicMaterial({{ color: 0x00ffff, transparent: true, opacity: 0.8 }})
+        new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8 })
       );
       ring.rotation.x = Math.PI / 3 + i * 0.2;
       group.add(ring);
-    }}
-  }} else if (avatarType === 'robot') {{
+    }
+  } else if (avatarType === 'robot') {
     const head = new THREE.Mesh(
       new THREE.BoxGeometry(2.2, 1.6, 1.5),
-      new THREE.MeshStandardMaterial({{ color: 0x8899bb, metalness: 0.9, roughness: 0.1 }})
+      new THREE.MeshStandardMaterial({ color: 0x8899bb, metalness: 0.9, roughness: 0.1 })
     );
     const eye1 = new THREE.Mesh(
       new THREE.SphereGeometry(0.25, 16, 16),
-      new THREE.MeshBasicMaterial({{ color: 0x33ff99 }})
+      new THREE.MeshBasicMaterial({ color: 0x33ff99 })
     );
     eye1.position.set(-0.5, 0.2, 0.8);
     const eye2 = eye1.clone(); eye2.position.x = 0.5;
     group.add(head, eye1, eye2);
 
-    for(let i=1; i<=2; i++) {{
+    for(let i=1; i<=2; i++) {
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(2.2 + i*0.5, 0.04, 16, 100),
-        new THREE.MeshBasicMaterial({{ color: 0xff00ff, transparent: true, opacity: 0.75 }})
+        new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.75 })
       );
       ring.rotation.y = Math.PI / 4 * i;
       group.add(ring);
-    }}
-  }} else {{
+    }
+  } else {
     const body = new THREE.Mesh(
       new THREE.ConeGeometry(1.3, 2.6, 16),
-      new THREE.MeshStandardMaterial({{ color: 0xf3e5ab, roughness: 0.3, metalness: 0.5 }})
+      new THREE.MeshStandardMaterial({ color: 0xf3e5ab, roughness: 0.3, metalness: 0.5 })
     );
     body.position.y = -0.5;
     const headZ = new THREE.Mesh(
       new THREE.SphereGeometry(0.65, 32, 32),
-      new THREE.MeshStandardMaterial({{ color: 0xffeedd }})
+      new THREE.MeshStandardMaterial({ color: 0xffeedd })
     );
     headZ.position.y = 1.0;
     group.add(body, headZ);
 
     const solarRing = new THREE.Mesh(
       new THREE.TorusGeometry(2.5, 0.05, 16, 100),
-      new THREE.MeshBasicMaterial({{ color: 0xffff00, transparent: true, opacity: 0.9 }})
+      new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.9 })
     );
     solarRing.rotation.x = Math.PI / 2;
     group.add(solarRing);
-  }}
-}}
+  }
+}
 
 buildAvatar();
 
 let isDragging = false, prevX = 0, prevY = 0;
-canvas.addEventListener('pointerdown', (e) => {{ isDragging = true; prevX = e.clientX; prevY = e.clientY; }]);
-window.addEventListener('pointermove', (e) => {{
+canvas.addEventListener('pointerdown', (e) => { isDragging = true; prevX = e.clientX; prevY = e.clientY; });
+window.addEventListener('pointermove', (e) => {
   if (!isDragging) return;
   const dx = e.clientX - prevX;
   const dy = e.clientY - prevY;
   group.rotation.y += dx * 0.01;
   group.rotation.x += dy * 0.01;
   prevX = e.clientX; prevY = e.clientY;
-}});
-window.addEventListener('pointerup', () => {{ isDragging = false; }]);
+});
+window.addEventListener('pointerup', () => { isDragging = false; });
 
-function animate() {{
+function animate() {
   requestAnimationFrame(animate);
   group.rotation.y += 0.006;
   renderer.render(scene, camera);
-}}
+}
 animate();
 
-window.addEventListener('resize', () => {{
+window.addEventListener('resize', () => {
   const w = canvas.parentElement.clientWidth || window.innerWidth;
   const h = canvas.parentElement.clientHeight || 500;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
-}});
+});
 </script>
 </body>
 </html>
 """
+    return html_template.replace("AVATAR_PLACEHOLDER", avatar_atual)
 
 def main():
     if "messages" not in st.session_state:
@@ -328,8 +329,6 @@ def main():
 
         user_input = st.chat_input("Digite seu comando para o Zeus...")
         if user_input:
-            st.session_test.messages.append({"role": "user", "content": user_input}) if "messages" in st.session_state else None
-            # Corrige chave session_state messages
             st.session_state.messages.append({"role": "user", "content": user_input})
             resposta = processar_prompt(user_input)
             st.session_state.messages.append({"role": "assistant", "content": resposta})
